@@ -163,7 +163,7 @@ def train_model(X_train, y_cls_train, y_reg_train, X_test, y_cls_test, y_reg_tes
         f1 = f1_score(y_cls_test.cpu().numpy(), cls_pred_binary)
         auc = roc_auc_score(y_cls_test.cpu().numpy(), cls_pred.cpu().numpy())
         rmse = np.sqrt(mean_squared_error(y_reg_test.cpu().numpy(), reg_pred.cpu().numpy()))
-        mape = mean_absolute_percentage_error(y_reg_test.cpu().numpy(), reg_pred.cpu().numpy())
+        mape = mean_absolute_percentage_error(y_reg_test.cpu().numpy(), reg_pred.cpu().numpy()) * 100.0
 
     return acc, recall, precision, f1, auc, rmse, mape
 
@@ -201,11 +201,12 @@ def main():
         results["mape"].append(mape)
 
         print(f"Fold {fold + 1} - Accuracy: {acc:.4f}, Recall: {recall:.4f}, Precision: {precision:.4f}, F1: {f1:.4f}, AUC: {auc:.4f}")
-        print(f"Fold {fold + 1} - RMSE: {rmse:.4f}, MAPE: {mape:.4f}")
+        print(f"Fold {fold + 1} - RMSE (USD/oz): {rmse:.4f}, MAPE (%): {mape:.4f}")
 
     print("\nOverall Results:")
+    labels = {"rmse": "RMSE (USD/oz)", "mape": "MAPE (%)"}
     for metric in results:
-        print(f"{metric.capitalize()}: {np.mean(results[metric]):.4f} ± {np.std(results[metric]):.4f}")
+        print(f"{labels.get(metric, metric.capitalize())}: {np.mean(results[metric]):.4f} ± {np.std(results[metric]):.4f}")
 
 if __name__ == "__main__":
     main()

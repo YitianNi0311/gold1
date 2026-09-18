@@ -5,7 +5,8 @@
 ## 当前版本
 
 - `归一.py`：FCNN1 + FCNN2 + LightGBM + XGBoost + Random Forest → GBM，保留原有重复评估流程。
-- `no_fcnn_model.py`、`run_no_fcnn.py`：本地独立零 FCNN 模型，LightGBM + XGBoost + Random Forest → GBM。当前仍是一次五折 OOF 加一次五折评估；拟议的五轮重复评估改动已撤回。
+- `no_fcnn_model.py`、`run_no_fcnn.py`：独立零 FCNN 模型，LightGBM + XGBoost + Random Forest → GBM。一次五折 OOF、五轮五折回归评估；分类只在第一轮五折计分。
+- `reconstructed_random_walk.py`、`reconstructed_cnn_lstm.py`、`reconstructed_without_fe.py`：历史空白项的独立重建代码。它们不是已找到的作者原实现；当前未写入 Table 8/9 成绩。
 - `RF.py`、`XGBoost.py`、`gold lightgbm.py`：独立树模型。
 - `GOLD_cleaned.xlsx`：当前实验工作簿。
 - `regression_scale_utils.py`：统一原始价格 RMSE（USD/oz）和百分数 MAPE。
@@ -28,4 +29,4 @@ python -m unittest -v test_regression_scale test_no_fcnn
 
 本工作区不包含统计检验实现。自动化代码测试用于验证程序和评估尺度。
 
-详见 [零 FCNN 运行说明](零FCNN运行说明.md)、[运行逻辑核对](零FCNN运行逻辑核对.md)和[回归尺度修改说明](回归尺度修改说明.md)。历史复核文档中引用的外部目录不随本仓库上传。
+详见 [代码修复与重建说明](代码修复与重建说明_20260918.md)、[零 FCNN 运行说明](零FCNN运行说明.md)和[回归尺度修改说明](回归尺度修改说明.md)。旧的[运行逻辑核对](零FCNN运行逻辑核对.md)记录五轮评估改动前的实现。历史复核文档中引用的外部目录不随本仓库上传；对齐所需的真实目标已单独保存在 `seed42_reference_targets.csv`。

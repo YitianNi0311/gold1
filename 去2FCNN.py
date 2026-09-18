@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 from sklearn.preprocessing import StandardScaler, RobustScaler
+from regression_scale_utils import regression_metrics_original_price
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score,
     f1_score, roc_auc_score, mean_squared_error,
@@ -1001,16 +1002,17 @@ def main():
         fold_meta_preds_reg = meta_model_reg.predict(fold_meta_features_reg)
 
         # Calculate Regression metrics (RMSE on normalized data)
-        rmse = root_mean_squared_error(y_test_reg_scaled, fold_meta_preds_reg)
-        mape = mean_absolute_percentage_error_custom(y_test_reg_scaled, fold_meta_preds_reg)
+        fold_meta_preds_reg, rmse, mape = regression_metrics_original_price(
+            y_test_reg_fold, fold_meta_preds_reg, prediction_scaler=scaler_y_reg
+        )
 
         # Store Regression metrics
         rmses.append(rmse)
         mapes.append(mape)
 
         # Print and log Regression metrics
-        print(f"Fold {fold + 1} - Regression: RMSE={rmse:.4f}, MAPE={mape:.4f}")
-        logging.info(f"Fold {fold + 1} - Regression: RMSE={rmse:.4f}, MAPE={mape:.4f}")
+        print(f"Fold {fold + 1} - Regression: RMSE (USD/oz)={rmse:.4f}, MAPE (%)={mape:.4f}")
+        logging.info(f"Fold {fold + 1} - Regression: RMSE (USD/oz)={rmse:.4f}, MAPE (%)={mape:.4f}")
 
         # Train base models for Classification
         models_clf, ensemble_models_clf, optimizers_clf, schedulers_clf, early_stoppings_clf, focal_loss = train_base_models_clf(
@@ -1094,12 +1096,12 @@ def main():
 
     # Overall Results for Regression
     print("\nOverall Regression Results:")
-    print(f"Average RMSE: {np.mean(rmses):.4f} ± {np.std(rmses):.4f}")
-    print(f"Average MAPE: {np.mean(mapes):.4f} ± {np.std(mapes):.4f}")
+    print(f"Average RMSE (USD/oz): {np.mean(rmses):.4f} ± {np.std(rmses):.4f}")
+    print(f"Average MAPE (%): {np.mean(mapes):.4f} ± {np.std(mapes):.4f}")
     logging.info(
         f"Overall Regression Results: "
-        f"Average RMSE={np.mean(rmses):.4f} ± {np.std(rmses):.4f}, "
-        f"Average MAPE={np.mean(mapes):.4f} ± {np.std(mapes):.4f}"
+        f"Average RMSE (USD/oz)={np.mean(rmses):.4f} ± {np.std(rmses):.4f}, "
+        f"Average MAPE (%)={np.mean(mapes):.4f} ± {np.std(mapes):.4f}"
     )
 
     # Overall Results for Classification
@@ -1121,8 +1123,8 @@ def main():
     # Save Overall Results
     with open('evaluation_results.txt', 'w') as f:
         f.write("Overall Regression Results:\n")
-        f.write(f"Average RMSE: {np.mean(rmses):.4f} ± {np.std(rmses):.4f}\n")
-        f.write(f"Average MAPE: {np.mean(mapes):.4f} ± {np.std(mapes):.4f}\n\n")
+        f.write(f"Average RMSE (USD/oz): {np.mean(rmses):.4f} ± {np.std(rmses):.4f}\n")
+        f.write(f"Average MAPE (%): {np.mean(mapes):.4f} ± {np.std(mapes):.4f}\n\n")
         f.write("Overall Classification Results:\n")
         f.write(f"Average Accuracy: {np.mean(accuracies):.4f} ± {np.std(accuracies):.4f}\n")
         f.write(f"Average Precision: {np.mean(precisions):.4f} ± {np.std(precisions):.4f}\n")

@@ -286,7 +286,7 @@ def root_mean_squared_error(y_true, y_pred):
 
 # Define MAPE (Mean Absolute Percentage Error)
 def mean_absolute_percentage_error_custom(y_true, y_pred):
-    return mean_absolute_percentage_error(y_true, y_pred)
+    return mean_absolute_percentage_error(y_true, y_pred) * 100.0
 
 
 # Define data preprocessing function
@@ -1007,12 +1007,12 @@ def feature_ablation_analysis(X, y_class, y_reg, feature_list, device, scaler_ty
     baseline_regression_mape = np.mean(baseline_metrics['regression']['MAPE'])
     baseline_classification_accuracy = np.mean(baseline_metrics['classification']['Accuracy'])
 
-    print(f"Baseline Regression RMSE: {baseline_regression_rmse:.4f}")
-    print(f"Baseline Regression MAPE: {baseline_regression_mape:.4f}")
+    print(f"Baseline Regression RMSE (USD/oz): {baseline_regression_rmse:.4f}")
+    print(f"Baseline Regression MAPE (%): {baseline_regression_mape:.4f}")
     print(f"Baseline Classification Accuracy: {baseline_classification_accuracy:.4f}")
 
-    logging.info(f"Baseline Regression RMSE: {baseline_regression_rmse:.4f}")
-    logging.info(f"Baseline Regression MAPE: {baseline_regression_mape:.4f}")
+    logging.info(f"Baseline Regression RMSE (USD/oz): {baseline_regression_rmse:.4f}")
+    logging.info(f"Baseline Regression MAPE (%): {baseline_regression_mape:.4f}")
     logging.info(f"Baseline Classification Accuracy: {baseline_classification_accuracy:.4f}")
 
     # Start feature ablation analysis
@@ -1248,7 +1248,7 @@ def plot_feature_importance_ablation(csv_path='feature_ablation_importance.csv')
         plt.savefig('feature_importance_regression_ablation.png')
         plt.close()
 
-        # Regression MAPE Impact
+        # Regression MAPE (%) Impact
         plt.figure(figsize=(10, 20))
         df_sorted = df.sort_values(by='Regression_MAPE_Impact', ascending=False)
         plt.barh(df_sorted['Feature'], df_sorted['Regression_MAPE_Impact'], color='salmon')

@@ -210,7 +210,7 @@ def root_mean_squared_error(y_true, y_pred):
 
 # 定义平均绝对百分比误差 (MAPE)
 def mean_absolute_percentage_error_custom(y_true, y_pred):
-    return mean_absolute_percentage_error(y_true, y_pred)
+    return mean_absolute_percentage_error(y_true, y_pred) * 100.0
 
 # 定义数据预处理函数
 def preprocess_data(file_path):
@@ -608,8 +608,8 @@ def main():
         y_pred_reg = meta_model_reg.predict(X_meta_reg_scaled)
         rmse = root_mean_squared_error(y_meta_reg, y_pred_reg)
         mape = mean_absolute_percentage_error_custom(y_meta_reg, y_pred_reg)
-        logging.info(f"Meta Model Regression RMSE: {rmse:.4f}")
-        logging.info(f"Meta Model Regression MAPE: {mape:.4f}")
+        logging.info(f"Meta Model Regression RMSE (USD/oz): {rmse:.4f}")
+        logging.info(f"Meta Model Regression MAPE (%): {mape:.4f}")
         regression_results.append({'RMSE': rmse, 'MAPE': mape})
 
         # 分类评估

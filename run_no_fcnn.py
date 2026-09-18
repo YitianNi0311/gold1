@@ -45,7 +45,7 @@ def classification_metrics(true, predicted, probabilities):
 
 
 def run(data_path, output_dir):
-    """Run the unchanged two-pass five-fold stacking procedure for zero FCNNs."""
+    """Run one OOF stage and the five historical evaluation rounds."""
     data_path, output_dir = Path(data_path).resolve(), Path(output_dir).resolve()
     X, y_class, y_reg = preprocess_data(data_path)
     raw = pd.read_excel(data_path)
@@ -89,68 +89,87 @@ def run(data_path, output_dir):
             regression_features, regression_labels, classification_features, classification_labels,
         )
 
-        predictions, metric_rows, boundaries = [], [], []
-        for fold, (train_index, test_index) in enumerate(folds, 1):
-            announce(f"Evaluation fold {fold}/5: retraining three base learners per task")
+        predictions, metric_rows, boundaries, regression_rows = [], [], [], []
+        for round_number in range(1, 6):
+          for fold, (train_index, test_index) in enumerate(folds, 1):
+            announce(f"Evaluation round {round_number}/5, fold {fold}/5: retraining three base learners per task")
             fd = prepare_fold(X, y_class, y_reg, train_index, test_index)
             reg_features, clf_features = train_fold(fd)
             pred_fit = meta_reg.predict(reg_features)
             pred_price, rmse, mape = regression_metrics_original_price(
                 fd["yr_test"], pred_fit, prediction_scaler=fd["scaler_y"],
             )
-            predicted_class = meta_clf.predict(clf_features)
-            probability = meta_clf.predict_proba(clf_features)[:, 1]
-            frame = pd.DataFrame({
-                "model": "No FCNN (three trees -> GBM)", "fold": fold,
+            regression_frame = pd.DataFrame({
+                "model": "No FCNN (three trees -> GBM)", "round": round_number, "fold": fold,
                 "row_index": X.index[test_index],
                 "date": dates.iloc[test_index].dt.strftime("%Y-%m-%d").to_numpy(),
-                "y_true_class": fd["yc_test"].to_numpy(), "y_pred_class": predicted_class,
-                "y_pred_probability": probability,
                 "y_true_price_original": fd["yr_test"].to_numpy(), "y_pred_price_original": pred_price,
                 "y_true_price_scaled": fd["yr_test_fit"], "y_pred_price_scaled": pred_fit,
             })
-            if not np.isfinite(frame.select_dtypes(include="number")).all().all():
+            if not np.isfinite(regression_frame.select_dtypes(include="number")).all().all():
                 raise ValueError("Final predictions contain NaN or infinity")
-            frame.to_csv(output_dir / f"fold{fold}_predictions.csv", index=False,
-                         encoding="utf-8-sig", float_format="%.17g")
-            predictions.append(frame)
-            write_json(output_dir / f"scaler_y_fold{fold}.json", {
+            regression_frame.to_csv(output_dir / f"round{round_number}_fold{fold}_regression.csv",
+                                    index=False, encoding="utf-8-sig", float_format="%.17g")
+            regression_rows.append(regression_frame)
+            write_json(output_dir / f"round{round_number}_scaler_y_fold{fold}.json", {
                 "mean": fd["scaler_y"].mean_.tolist(), "scale": fd["scaler_y"].scale_.tolist(),
             })
-            scores = classification_metrics(fd["yc_test"], predicted_class, probability)
-            scores.update(rmse_usd_per_oz=rmse, mape_percent=mape)
-            metric_rows.append({"fold": fold, "n_samples": len(test_index), **scores})
-            boundaries.append({
+            row = {"round": round_number, "fold": fold, "n_samples": len(test_index),
+                   "rmse_usd_per_oz": rmse, "mape_percent": mape}
+            if round_number == 1:
+              predicted_class = meta_clf.predict(clf_features)
+              probability = meta_clf.predict_proba(clf_features)[:, 1]
+              scores = classification_metrics(fd["yc_test"], predicted_class, probability)
+              row.update(scores)
+              frame = regression_frame.copy()
+              frame["y_true_class"] = fd["yc_test"].to_numpy()
+              frame["y_pred_class"] = predicted_class
+              frame["y_pred_probability"] = probability
+              frame.to_csv(output_dir / f"fold{fold}_predictions.csv", index=False,
+                           encoding="utf-8-sig", float_format="%.17g")
+              predictions.append(frame)
+              announce("Classification: " + ", ".join(f"{key}={scores[key]:.6f}" for key in
+                                                        ("accuracy", "precision", "recall", "f1", "auc")))
+            metric_rows.append(row)
+            if round_number == 1:
+              boundaries.append({
                 "fold": fold, "n_train": len(train_index), "n_test": len(test_index),
                 "train_start": str(dates.iloc[train_index[0]].date()),
                 "train_end": str(dates.iloc[train_index[-1]].date()),
                 "test_start": str(dates.iloc[test_index[0]].date()),
                 "test_end": str(dates.iloc[test_index[-1]].date()),
-            })
-            announce(f"Fold {fold}: RMSE (USD/oz)={rmse:.6f}, MAPE (%)={mape:.6f}")
-            announce("Classification: " + ", ".join(f"{key}={scores[key]:.6f}" for key in
-                                                      ("accuracy", "precision", "recall", "f1", "auc")))
+              })
+            announce(f"Round {round_number}, fold {fold}: RMSE (USD/oz)={rmse:.6f}, MAPE (%)={mape:.6f}")
+          meta_reg, meta_clf = fit_meta_models(
+              regression_features, regression_labels, classification_features, classification_labels,
+          )
 
         combined = pd.concat(predictions, ignore_index=True)
         combined.to_csv(output_dir / "predictions.csv", index=False, encoding="utf-8-sig", float_format="%.17g")
+        pd.concat(regression_rows, ignore_index=True).to_csv(
+            output_dir / "regression_predictions_all_rounds.csv", index=False,
+            encoding="utf-8-sig", float_format="%.17g")
         fold_metrics = pd.DataFrame(metric_rows)
         fold_metrics.to_csv(output_dir / "fold_metrics.csv", index=False, encoding="utf-8-sig", float_format="%.17g")
         pd.DataFrame(boundaries).to_csv(output_dir / "fold_boundaries.csv", index=False, encoding="utf-8-sig")
         summary = pd.DataFrame([
             {"metric": metric, "label": METRIC_LABELS.get(metric, metric),
+             "n_fold_results": int(fold_metrics[metric].count()),
              "mean": float(fold_metrics[metric].mean()), "std": float(fold_metrics[metric].std(ddof=0))}
-            for metric in scores
+            for metric in ("accuracy", "precision", "recall", "f1", "auc", "rmse_usd_per_oz", "mape_percent")
         ])
         summary.to_csv(output_dir / "metric_summary.csv", index=False, encoding="utf-8-sig", float_format="%.17g")
         for row in summary.itertuples():
-            announce(f"Five-fold {row.label}: {row.mean:.6f} +/- {row.std:.6f}")
+            announce(f"{row.n_fold_results} fold results, {row.label}: {row.mean:.6f} +/- {row.std:.6f}")
         _, pooled_rmse, pooled_mape = regression_metrics_original_price(
             combined.y_true_price_original, combined.y_pred_price_original,
         )
         pooled = classification_metrics(combined.y_true_class, combined.y_pred_class, combined.y_pred_probability)
         pooled.update(rmse_usd_per_oz=pooled_rmse, mape_percent=pooled_mape)
         write_json(output_dir / "pooled_metrics.json", pooled)
-        status.update(status="completed", n_predictions=len(combined))
+        status.update(status="completed", n_predictions=len(combined),
+                      n_regression_evaluations=len(regression_rows),
+                      n_classification_evaluations=len(predictions))
         announce(f"Completed: {output_dir}")
         return output_dir
     except Exception as exc:

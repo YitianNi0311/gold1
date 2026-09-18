@@ -73,7 +73,7 @@ class RegressionScaleTests(unittest.TestCase):
             'fd["scaler_y"].inverse_transform(pred_fit.reshape(-1, 1))',
             runner,
         )
-        self.assertIn('mape_percent=mape', runner)
+        self.assertIn('"mape_percent": mape', runner)
         self.assertIn("from no_fcnn_model import", runner)
         zero = ast.parse((ROOT / "no_fcnn_model.py").read_text(encoding="utf-8"))
         for name, expected in (

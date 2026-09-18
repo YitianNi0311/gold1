@@ -157,7 +157,7 @@ def root_mean_squared_error(y_true, y_pred):
 
 # 定义自定义的平均绝对百分比误差（MAPE）
 def mean_absolute_percentage_error_custom(y_true, y_pred):
-    return mean_absolute_percentage_error(y_true, y_pred)
+    return mean_absolute_percentage_error(y_true, y_pred) * 100.0
 
 
 # 定义数据预处理函数
@@ -909,8 +909,8 @@ def main():
         mapes.append(mape)
 
         # 打印和记录回归指标
-        print(f"Fold {fold + 1} - Regression: RMSE={rmse:.4f}, MAPE={mape:.4f}")
-        logging.info(f"Fold {fold + 1} - Regression: RMSE={rmse:.4f}, MAPE={mape:.4f}")
+        print(f"Fold {fold + 1} - Regression: RMSE (USD/oz)={rmse:.4f}, MAPE (%)={mape:.4f}")
+        logging.info(f"Fold {fold + 1} - Regression: RMSE (USD/oz)={rmse:.4f}, MAPE (%)={mape:.4f}")
 
         # 计算分类指标
         acc = accuracy_score(y_test_clf_fold, fold_meta_preds_clf)
@@ -938,12 +938,12 @@ def main():
 
     # 汇总回归的整体结果
     print("\nOverall Regression Results:")
-    print(f"Average RMSE: {np.mean(rmses):.4f} ± {np.std(rmses):.4f}")
-    print(f"Average MAPE: {np.mean(mapes):.4f} ± {np.std(mapes):.4f}")
+    print(f"Average RMSE (USD/oz): {np.mean(rmses):.4f} ± {np.std(rmses):.4f}")
+    print(f"Average MAPE (%): {np.mean(mapes):.4f} ± {np.std(mapes):.4f}")
     logging.info(
         f"Overall Regression Results: "
-        f"Average RMSE={np.mean(rmses):.4f} ± {np.std(rmses):.4f}, "
-        f"Average MAPE={np.mean(mapes):.4f} ± {np.std(mapes):.4f}"
+        f"Average RMSE (USD/oz)={np.mean(rmses):.4f} ± {np.std(rmses):.4f}, "
+        f"Average MAPE (%)={np.mean(mapes):.4f} ± {np.std(mapes):.4f}"
     )
 
     # 汇总分类的整体结果
@@ -965,8 +965,8 @@ def main():
     # 保存整体结果
     with open('evaluation_results.txt', 'w') as f:
         f.write("Overall Regression Results:\n")
-        f.write(f"Average RMSE: {np.mean(rmses):.4f} ± {np.std(rmses):.4f}\n")
-        f.write(f"Average MAPE: {np.mean(mapes):.4f} ± {np.std(mapes):.4f}\n\n")
+        f.write(f"Average RMSE (USD/oz): {np.mean(rmses):.4f} ± {np.std(rmses):.4f}\n")
+        f.write(f"Average MAPE (%): {np.mean(mapes):.4f} ± {np.std(mapes):.4f}\n\n")
         f.write("Overall Classification Results:\n")
         f.write(f"Average Accuracy: {np.mean(accuracies):.4f} ± {np.std(accuracies):.4f}\n")
         f.write(f"Average Precision: {np.mean(precisions):.4f} ± {np.std(precisions):.4f}\n")

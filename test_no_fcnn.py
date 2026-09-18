@@ -74,7 +74,7 @@ class NoFCNNTests(unittest.TestCase):
         for item in classifiers:
             np.testing.assert_array_equal(item.fit.call_args.args[1], classes.iloc[:8])
 
-    def test_local_pipeline_outputs_and_single_fold_inverse(self):
+    def test_five_evaluation_rounds_and_fold_specific_inverse(self):
         X = pd.DataFrame({"value": np.arange(60.)})
         classes, prices = pd.Series([0, 1] * 30), pd.Series(np.arange(60.) * 10 + 100)
         dates = pd.DataFrame({"Date": pd.date_range("2020-01-01", periods=60)})
@@ -92,25 +92,32 @@ class NoFCNNTests(unittest.TestCase):
                  patch.object(runner, "regression_metrics_original_price", wraps=regression_metrics_original_price) as metrics, \
                  contextlib.redirect_stdout(io.StringIO()):
                 runner.run(Path(directory) / "fixture.xlsx", output)
-            self.assertEqual(training.call_count, 10)
-            self.assertEqual(metrics.call_count, 6)
-            self.assertEqual(sum("prediction_scaler" in call.kwargs for call in metrics.call_args_list), 5)
+            self.assertEqual(training.call_count, 30)
+            self.assertEqual(metrics.call_count, 26)
+            self.assertEqual(sum("prediction_scaler" in call.kwargs for call in metrics.call_args_list), 25)
             manifest = json.loads((output / "run_manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["status"], "completed")
             self.assertEqual(manifest["fcnn_count"], 0)
             self.assertEqual(manifest["n_predictions"], 50)
+            self.assertEqual(manifest["n_regression_evaluations"], 25)
+            self.assertEqual(manifest["n_classification_evaluations"], 5)
             predictions = pd.read_csv(output / "predictions.csv")
             np.testing.assert_allclose(predictions.y_true_price_original, prices.iloc[10:])
             self.assertEqual(predictions.groupby("fold").size().tolist(), [10] * 5)
-            fold_metrics = pd.read_csv(output / "fold_metrics.csv").set_index("fold")
+            fold_metrics = pd.read_csv(output / "fold_metrics.csv")
+            self.assertEqual(len(fold_metrics), 25)
+            self.assertEqual(fold_metrics.groupby("round").size().tolist(), [5] * 5)
+            self.assertEqual(fold_metrics.accuracy.notna().sum(), 5)
+            first_round = fold_metrics.loc[fold_metrics["round"].eq(1)].set_index("fold")
             for fold, frame in predictions.groupby("fold"):
                 _, rmse, mape = regression_metrics_original_price(frame.y_true_price_original, frame.y_pred_price_original)
-                self.assertAlmostEqual(fold_metrics.loc[fold, "rmse_usd_per_oz"], rmse)
-                self.assertAlmostEqual(fold_metrics.loc[fold, "mape_percent"], mape)
+                self.assertAlmostEqual(first_round.loc[fold, "rmse_usd_per_oz"], rmse)
+                self.assertAlmostEqual(first_round.loc[fold, "mape_percent"], mape)
             summary = pd.read_csv(output / "metric_summary.csv").set_index("metric")
             self.assertEqual(summary.loc["mape_percent", "label"], "MAPE (%)")
             self.assertEqual(summary.loc["rmse_usd_per_oz", "label"], "RMSE (USD/oz)")
-            self.assertEqual(len(list(output.glob("scaler_y_fold*.json"))), 5)
+            self.assertEqual(len(list(output.glob("round*_scaler_y_fold*.json"))), 25)
+            self.assertEqual(len(pd.read_csv(output / "regression_predictions_all_rounds.csv")), 250)
 
 
 if __name__ == "__main__":

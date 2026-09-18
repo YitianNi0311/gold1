@@ -9,3 +9,7 @@ venv/
 .DS_Store
 Thumbs.db
 ~$*
+no_fcnn_results/
+reconstructed_runs/
+lstm/model_fold_*.pt
+*.log

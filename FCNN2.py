@@ -131,7 +131,7 @@ def train_fcnn(X_train, y_cls_train, y_reg_train, X_test, y_cls_test, y_reg_test
     auc = roc_auc_score(y_cls_test, torch.softmax(cls_output, axis=1)[:, 1].cpu().numpy())
 
     rmse = np.sqrt(mean_squared_error(y_reg_test, reg_preds))
-    mape = mean_absolute_percentage_error(y_reg_test, reg_preds)
+    mape = mean_absolute_percentage_error(y_reg_test, reg_preds) * 100.0
 
     return acc, prec, rec, f1, auc, rmse, mape
 
@@ -176,8 +176,8 @@ def main():
     print(f"Average Recall: {np.mean(results['recall']):.4f} ± {np.std(results['recall']):.4f}")
     print(f"Average F1: {np.mean(results['f1']):.4f} ± {np.std(results['f1']):.4f}")
     print(f"Average AUC: {np.mean(results['auc']):.4f} ± {np.std(results['auc']):.4f}")
-    print(f"Average RMSE: {np.mean(results['rmse']):.4f} ± {np.std(results['rmse']):.4f}")
-    print(f"Average MAPE: {np.mean(results['mape']):.4f} ± {np.std(results['mape']):.4f}")
+    print(f"Average RMSE (USD/oz): {np.mean(results['rmse']):.4f} ± {np.std(results['rmse']):.4f}")
+    print(f"Average MAPE (%): {np.mean(results['mape']):.4f} ± {np.std(results['mape']):.4f}")
 
 if __name__ == "__main__":
     main()

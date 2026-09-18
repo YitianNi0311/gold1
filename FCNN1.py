@@ -181,7 +181,7 @@ def train_fcnn(X_train, y_cls_train, y_reg_train, X_test, y_cls_test, y_reg_test
     auc = roc_auc_score(y_cls_test, torch.softmax(cls_output, axis=1)[:, 1].cpu().numpy())
 
     rmse = np.sqrt(mean_squared_error(y_reg_test, reg_preds))
-    mape = mean_absolute_percentage_error(y_reg_test, reg_preds)
+    mape = mean_absolute_percentage_error(y_reg_test, reg_preds) * 100.0
 
     return acc, prec, rec, f1, auc, rmse, mape
 
@@ -220,11 +220,12 @@ def main():
         results["mape"].append(mape)
 
         print(f"Fold {fold + 1} - Accuracy: {acc:.4f}, Precision: {prec:.4f}, Recall: {rec:.4f}, F1: {f1:.4f}, AUC: {auc:.4f}")
-        print(f"Fold {fold + 1} - RMSE: {rmse:.4f}, MAPE: {mape:.4f}")
+        print(f"Fold {fold + 1} - RMSE (USD/oz): {rmse:.4f}, MAPE (%): {mape:.4f}")
 
     print("\nOverall Results:")
+    labels = {"rmse": "RMSE (USD/oz)", "mape": "MAPE (%)"}
     for metric in results:
-        print(f"{metric.capitalize()}: {np.mean(results[metric]):.4f} ± {np.std(results[metric]):.4f}")
+        print(f"{labels.get(metric, metric.capitalize())}: {np.mean(results[metric]):.4f} ± {np.std(results[metric]):.4f}")
 
 if __name__ == "__main__":
     main()

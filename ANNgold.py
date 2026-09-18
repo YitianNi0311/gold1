@@ -221,5 +221,5 @@ for train_idx, test_idx in tscv.split(X_tensor):
     mase_list.append(mase)
 
 # 输出结果
-print(f"Average RMSE: {np.mean(rmse_list):.4f}")
+print(f"Average RMSE (USD/oz): {np.mean(rmse_list):.4f}")
 print(f"Average MASE: {np.mean(mase_list):.4f}")

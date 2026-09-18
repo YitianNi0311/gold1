@@ -1,0 +1,13 @@
+{
+  "purpose": "Historical test-target alignment only; no model prediction or score",
+  "source": "论文参数重跑与统计检验_20260914\\run_20260914_114627_509349\\full\\predictions.csv",
+  "source_sha256": "cb0d8da274b6e041ac027713a1262cb7190e293bbcd77653dc065bd39d27b54a",
+  "reference_sha256": "08fed1ddd432f5aa81f48dfee790e55f421865cbed245af0298ada5adf204fc9",
+  "rows": 3680,
+  "columns": [
+    "fold",
+    "date",
+    "y_true_class",
+    "y_true_price"
+  ]
+}

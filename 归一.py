@@ -1,4 +1,5 @@
 import pandas as pd
+import os
 import numpy as np
 import torch
 import torch.nn as nn
@@ -684,7 +685,7 @@ def generate_meta_features_clf(fcnn1, fcnn2, lgbm_clf, xgb_clf, rf_clf, test_loa
 
 def main():
     # File path (modify as needed)
-    file_path = "/home/w/桌面/lilj/GOLD_cleaned.xlsx"
+    file_path = os.path.join(os.path.dirname(__file__), "GOLD_cleaned.xlsx")
     try:
         X, y_class, y_reg = preprocess_data(file_path)
     except Exception as e:
@@ -1094,6 +1095,25 @@ def main():
         # Append to meta-feature lists for Classification
         meta_train_features_clf_cv2.append(fold_meta_features_clf)
         meta_train_labels_clf_cv2.extend(y_test_clf_fold.values)
+
+        # Keep the historical protocol: classification is scored in the first
+        # evaluation round only; regression continues for all five rounds.
+        fold_meta_preds_clf = meta_model_clf.predict(fold_meta_features_clf)
+        fold_meta_probs_clf = meta_model_clf.predict_proba(fold_meta_features_clf)[:, 1]
+        accuracy = accuracy_score(y_test_clf_fold, fold_meta_preds_clf)
+        precision = precision_score(y_test_clf_fold, fold_meta_preds_clf, zero_division=0)
+        recall = recall_score(y_test_clf_fold, fold_meta_preds_clf, zero_division=0)
+        f1 = f1_score(y_test_clf_fold, fold_meta_preds_clf, zero_division=0)
+        auc = roc_auc_score(y_test_clf_fold, fold_meta_probs_clf)
+        accuracies.append(accuracy)
+        precisions.append(precision)
+        recalls.append(recall)
+        f1_scores.append(f1)
+        aucs.append(auc)
+        print(f"Fold {fold + 1} - Classification: ACC={accuracy:.4f}, PREC={precision:.4f}, "
+              f"REC={recall:.4f}, F1={f1:.4f}, AUC={auc:.4f}")
+        logging.info(f"Fold {fold + 1} - Classification: ACC={accuracy:.4f}, PREC={precision:.4f}, "
+                     f"REC={recall:.4f}, F1={f1:.4f}, AUC={auc:.4f}")
 
     # Combine all meta-features and labels for Regression (First Cross-Validation)
     meta_train_features_reg_cv1 = np.vstack(meta_train_features_reg_cv1)
