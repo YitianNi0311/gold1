@@ -19,6 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 RUNS = ROOT / "seeded_runs"
 OUTPUT = ROOT / "六表_新重跑_42_43_44"
+ARCHIVE = Path(r"C:\Users\WKU-MATH-558\Desktop\gold1")
 GIT = shutil.which("git") or str(Path(
     r"C:\Users\WKU-MATH-558\AppData\Local\CodexTools\gold1-github\git\cmd\git.exe"))
 MODELS = ("random_walk", "random_forest", "xgboost", "lightgbm",
@@ -68,6 +69,12 @@ def publish():
                    cwd=ROOT, check=True)
     subprocess.run([GIT, "push", "origin", "main"], cwd=ROOT, check=True)
     announce("PUBLISHED six tables to GitHub")
+    if ARCHIVE.is_dir() and ARCHIVE.resolve() != ROOT.resolve():
+        destination = ARCHIVE / OUTPUT.name
+        if destination.exists():
+            raise FileExistsError(f"Refusing to overwrite archival results: {destination}")
+        shutil.copytree(OUTPUT, destination)
+        announce(f"COPIED six tables to {destination}")
 
 
 def main(wait_for_full42=False):
