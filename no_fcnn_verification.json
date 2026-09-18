@@ -1,0 +1,11 @@
+{
+  "local_model": "no_fcnn_model.py",
+  "entrypoint": "run_no_fcnn.py",
+  "architecture": "LightGBM + XGBoost + Random Forest -> GBM",
+  "fcnn_count": 0,
+  "historical_runner_dependency": false,
+  "workspace_python_files_scanned": 26,
+  "unit_tests_passed": 10,
+  "unit_tests_failed": 0,
+  "formal_gold_training_started": false
+}

@@ -1,0 +1,22 @@
+{
+  "reference_root": "C:\\Users\\WKU-MATH-558\\Desktop\\gold1",
+  "scope": "Evaluation scale and output units only; historical training unchanged",
+  "files": {
+    "归一.py": {
+      "before_sha256": "ff44ac38a0858e350e00422829958f11042a5fee0d6ba7d3ab680acca5e520fb",
+      "after_sha256": "1c9073562430ec89a79dfee0405cbacdef836a49190722a083ffca021a7ef110"
+    },
+    "RF.py": {
+      "before_sha256": "76db998760c4e0b196ad576bca838930e5a8d6b4d4e06f2e90c9b74af6b68790",
+      "after_sha256": "354d6e3c266fad715ddab26a7c6364a6ad70f43c73b2c015ef1f11f44fdaf34d"
+    },
+    "XGBoost.py": {
+      "before_sha256": "ec9efa513bb013854a6991c5381e3cd32694314f4d7a711a3e57b536b3ea68f4",
+      "after_sha256": "5e9f6c00ca15cfef77677ba7044691126522d53792670be92610fe4f8b4018a2"
+    },
+    "gold lightgbm.py": {
+      "before_sha256": "9ca9ea58a5dfa406826eadd5b59c7ed1df989127e07c6e67cdfd46dea0794cab",
+      "after_sha256": "067bfdbdfc4efe35b4f4883ee51e5600cecbe33088c90d1f22aed51a4523e14a"
+    }
+  }
+}

@@ -1,0 +1,121 @@
+{
+  "preprocessing_scaling_search_functions_ast_equal": [
+    "preprocess_data",
+    "preprocess_and_scale",
+    "preprocess_and_scale_reg_target",
+    "objective_lgbm_reg",
+    "optimize_lgbm_reg",
+    "objective_lgbm_clf",
+    "optimize_lgbm_clf"
+  ],
+  "real_data": {
+    "n_samples": 4419,
+    "n_features": 48,
+    "predictions_per_model": 3680,
+    "dates_valid": true,
+    "folds": [
+      {
+        "fold": 1,
+        "n_train": 739,
+        "n_test": 736,
+        "train_start": "2002-03-05",
+        "train_end": "2006-01-18",
+        "test_start": "2006-01-19",
+        "test_end": "2009-08-27"
+      },
+      {
+        "fold": 2,
+        "n_train": 1475,
+        "n_test": 736,
+        "train_start": "2002-03-05",
+        "train_end": "2009-08-27",
+        "test_start": "2009-08-28",
+        "test_end": "2013-05-28"
+      },
+      {
+        "fold": 3,
+        "n_train": 2211,
+        "n_test": 736,
+        "train_start": "2002-03-05",
+        "train_end": "2013-05-28",
+        "test_start": "2013-05-29",
+        "test_end": "2017-05-22"
+      },
+      {
+        "fold": 4,
+        "n_train": 2947,
+        "n_test": 736,
+        "train_start": "2002-03-05",
+        "train_end": "2017-05-22",
+        "test_start": "2017-05-23",
+        "test_end": "2021-01-15"
+      },
+      {
+        "fold": 5,
+        "n_train": 3683,
+        "n_test": 736,
+        "train_start": "2002-03-05",
+        "train_end": "2021-01-15",
+        "test_start": "2021-01-19",
+        "test_end": "2024-08-29"
+      }
+    ]
+  },
+  "all_five_fold_inputs_and_scalers_exactly_equal": true,
+  "base_estimator_classes_and_all_constructor_parameters_equal_at_seed42": true,
+  "controlled_orchestrator_comparison": {
+    "base_feature_generation": "same synthetic features; no Optuna/base fitting",
+    "meta_models": "real GBM with 300 stages, learning_rate=.15, max_depth=5, random_state=42",
+    "training_fold_calls_each": 10,
+    "prediction_rows": 50,
+    "comparison_columns": [
+      "fold",
+      "date",
+      "y_true_class",
+      "y_pred_class",
+      "y_pred_probability",
+      "y_true_price",
+      "y_pred_price_original",
+      "y_true_price_scaled",
+      "y_pred_price_scaled"
+    ],
+    "predictions_and_common_pooled_metrics_exactly_equal": true
+  },
+  "not_fully_identical_to_retained_runner": true,
+  "differences": {
+    "optuna_sampler_seed": {
+      "retained_runner_default": 42,
+      "local": null,
+      "affects_training": true
+    },
+    "seed_interface": {
+      "retained_runner": "--seed, default 42",
+      "local": "fixed 42"
+    },
+    "date_validation": {
+      "retained_runner": "rejects invalid/duplicate aligned dates",
+      "local": "no explicit duplicate-date check",
+      "provided_data_valid": true
+    },
+    "reporting": [
+      "local omits per-tree training losses and scaled native diagnostics",
+      "local omits MAE",
+      "local adds five-fold summary; CSV schemas differ"
+    ]
+  },
+  "comparison_to_original_main": {
+    "original_evaluation_passes": 5,
+    "local_evaluation_passes": 1,
+    "original_meta_reg_fit_calls": 6,
+    "local_meta_reg_fit_calls": 1
+  },
+  "formal_gold_training_performed": false,
+  "model_code_modified_this_check": false,
+  "source_sha256": {
+    "C:\\Users\\WKU-MATH-558\\Desktop\\gold1\\论文参数重跑与统计检验_20260914\\source\\归一_论文参数.py": "ff44ac38a0858e350e00422829958f11042a5fee0d6ba7d3ab680acca5e520fb",
+    "C:\\Users\\WKU-MATH-558\\Desktop\\gold1\\论文参数重跑与统计检验_20260914\\run_experiment.py": "cec09c80ed2bd2f01a4bedf00b2b9d2ae9083577d818e3293e9185a04b1b354a",
+    "C:\\Users\\WKU-MATH-558\\Desktop\\gold1\\论文参数重跑与统计检验_20260914\\no_fcnn_model.py": "1baa4098af51101f43ee915b3cbe7f2710b7ad285742532a1978e200ececadec",
+    "C:\\Users\\WKU-MATH-558\\Desktop\\goldnew\\gold1\\no_fcnn_model.py": "b9cc074aa649621305b4d1ad8229dc37a900de97cb1cacf1a7db58d70efbc7a5",
+    "C:\\Users\\WKU-MATH-558\\Desktop\\goldnew\\gold1\\run_no_fcnn.py": "1eda2e98726cc9a612a9ab62d4fab98168bf520ce2019f7c4477dc36f8098d60"
+  }
+}
