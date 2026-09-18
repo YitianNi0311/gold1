@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from diebold_mariano import save_dm_tables
-from historical_alignment import REFERENCE
+from historical_alignment import REFERENCE, aligned_data
 
 
 MODELS = (
@@ -23,7 +23,20 @@ MODELS = (
 )
 
 
-def read_metrics(run_root, model, seed):
+def validate_targets(frame, expected, expected_positions, *, price_column, class_column):
+    if len(frame) != 3680 or not np.array_equal(frame.fold.to_numpy(), expected.fold.to_numpy()) or not np.array_equal(
+            pd.to_datetime(frame.date).dt.strftime("%Y-%m-%d"), expected.date):
+        raise ValueError("Fold or daily test dates differ from the historical reference")
+    if not np.array_equal(frame[class_column].to_numpy(dtype=int), expected.y_true_class.to_numpy(dtype=int)):
+        raise ValueError("Daily classification truths differ from the historical reference")
+    if not np.allclose(frame[price_column], expected.y_true_price, rtol=0, atol=1e-8):
+        raise ValueError("Daily original gold prices differ from the historical reference")
+    if "row_index" in frame and not np.array_equal(
+            frame.row_index.to_numpy(dtype=int), expected_positions):
+        raise ValueError("Daily source row indices differ from the historical reference")
+
+
+def read_metrics(run_root, model, seed, expected, expected_positions):
     folder = run_root / f"seed{seed}" / model
     manifest = json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))
     if manifest["status"] != "completed" or manifest.get("seed") != seed:
@@ -35,17 +48,19 @@ def read_metrics(run_root, model, seed):
                             on="fold", validate="one_to_one")
         regression = pd.read_csv(folder / "regression_predictions.csv")
         classification = pd.read_csv(folder / "classification_predictions.csv")
-        if len(regression) != 3680 or len(classification) != 3680 or not np.array_equal(
-                regression.date, classification.date) or not np.array_equal(
-                regression.y_true_class, classification.y_true):
-            raise ValueError("CNN-LSTM classification and regression runs differ")
+        validate_targets(regression, expected, expected_positions,
+                         price_column="y_true_price", class_column="y_true_class")
+        validate_targets(classification, expected, expected_positions,
+                         price_column="y_true_price", class_column="y_true")
     else:
         metrics = pd.read_csv(folder / "fold_metrics.csv")
         if "round" in metrics:
             metrics = metrics.loc[metrics["round"].eq(1)]
         predictions = pd.read_csv(folder / "predictions.csv")
-        if len(predictions) != 3680 or predictions.groupby("fold").size().to_dict() != dict.fromkeys(range(1, 6), 736):
-            raise ValueError(f"Incorrect first-round test count: {folder}")
+        validate_targets(predictions, expected, expected_positions,
+                         price_column="y_true_price_original", class_column="y_true_class")
+    if metrics.groupby("fold").size().to_dict() != dict.fromkeys(range(1, 6), 1):
+        raise ValueError(f"Incorrect five-fold metrics: {folder}")
     if len(metrics) != 5 or metrics.fold.tolist() != [1, 2, 3, 4, 5]:
         raise ValueError(f"Expected five chronological folds: {folder}")
     return metrics
@@ -56,11 +71,12 @@ def format_mean_std(values):
     return f"{values.mean():.4f} ± {values.std(ddof=0):.4f}"
 
 
-def make_tables(run_root, seeds):
+def make_tables(run_root, seeds, expected, expected_positions):
     collected = {}
     for model, _, _ in MODELS:
         for seed in seeds:
-            collected[model, seed] = read_metrics(run_root, model, seed)
+            collected[model, seed] = read_metrics(
+                run_root, model, seed, expected, expected_positions)
     table8, table9 = [], []
     for model, label, source in MODELS:
         metrics = pd.concat([collected[model, seed] for seed in seeds], ignore_index=True)
@@ -99,8 +115,10 @@ def build(run_root, output_dir):
     run_root, output_dir = Path(run_root).resolve(), Path(output_dir).resolve()
     if output_dir.exists():
         raise FileExistsError(output_dir)
-    seed42_8, seed42_9 = make_tables(run_root, (42,))
-    mean_8, mean_9 = make_tables(run_root, (42, 43, 44))
+    x, _, _, _, splits, expected = aligned_data()
+    expected_positions = np.concatenate([x.index[test].to_numpy() for _, test in splits])
+    seed42_8, seed42_9 = make_tables(run_root, (42,), expected, expected_positions)
+    mean_8, mean_9 = make_tables(run_root, (42, 43, 44), expected, expected_positions)
     pairs = {seed: (run_root / f"seed{seed}" / "full" / "predictions.csv",
                     run_root / f"seed{seed}" / "no_fcnn" / "predictions.csv")
              for seed in (42, 43, 44)}

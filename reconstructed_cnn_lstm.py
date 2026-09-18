@@ -77,6 +77,7 @@ def run_regression(module, x, y_price, expected, splits, device, output_dir, see
         frame = expected.loc[expected.fold.eq(fold)].copy()
         if not np.allclose(frame.y_true_price, truth, rtol=0, atol=1e-8):
             raise ValueError("Regression truth does not match historical fold")
+        frame["row_index"] = x.index[test].to_numpy()
         frame["y_pred_price_original"] = pred_price
         frame["y_pred_price_scaled"] = pred_fit
         rows.append(frame)
@@ -132,6 +133,8 @@ def run(output_dir, task="both", seed=42):
                     predictions.fold.to_numpy(), expected.fold.to_numpy()):
                 raise ValueError("CNN-LSTM fold positions or classification targets are misaligned")
             predictions = predictions.reset_index(drop=True)
+            predictions["sample_position"] = predictions.row_index.to_numpy()
+            predictions["row_index"] = x.index[expected_positions].to_numpy()
             predictions["date"] = expected.date.to_numpy()
             predictions["y_true_price"] = expected.y_true_price.to_numpy()
             predictions.to_csv(output_dir / "classification_predictions.csv", index=False,
