@@ -11,5 +11,7 @@ Thumbs.db
 ~$*
 no_fcnn_results/
 reconstructed_runs/
+seeded_runs/
+training_log.txt
 lstm/model_fold_*.pt
 *.log

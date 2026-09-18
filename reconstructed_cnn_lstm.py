@@ -35,11 +35,11 @@ def load_tuned_module(output_dir):
     return module
 
 
-def run_regression(module, x, y_price, expected, splits, device, output_dir):
+def run_regression(module, x, y_price, expected, splits, device, output_dir, seed=42):
     """Fit the reconstructed one-output head on each original training fold."""
     rows, metrics = [], []
     for fold, (train, test) in enumerate(splits, 1):
-        module.set_seed(42)
+        module.set_seed(seed)
         scaler_x = StandardScaler()
         scaler_y = StandardScaler()
         x_train = scaler_x.fit_transform(x.iloc[train]).astype(np.float32)
@@ -47,7 +47,7 @@ def run_regression(module, x, y_price, expected, splits, device, output_dir):
         y_train = scaler_y.fit_transform(
             y_price.iloc[train].to_numpy().reshape(-1, 1)).astype(np.float32)
         dataset = TensorDataset(torch.from_numpy(x_train), torch.from_numpy(y_train))
-        generator = torch.Generator().manual_seed(42)
+        generator = torch.Generator().manual_seed(seed)
         loader = DataLoader(dataset, batch_size=module.BATCH_SIZE, shuffle=True,
                             generator=generator, num_workers=0)
         model = module.CNNLSTM(hidden_size=128, num_classes=1).to(device)
@@ -93,20 +93,26 @@ def run_regression(module, x, y_price, expected, splits, device, output_dir):
                                   encoding="utf-8-sig", float_format="%.17g")
 
 
-def run(output_dir, task="both"):
+def run(output_dir, task="both", seed=42):
     output_dir = Path(output_dir)
     x, y_class, y_price, dates, splits, expected = aligned_data()
     output_dir.mkdir(parents=True, exist_ok=False)
     module = load_tuned_module(output_dir)
+    original_set_seed = module.set_seed
+    original_make_loader = module.make_loader
+    module.set_seed = lambda selected_seed=None: original_set_seed(
+        seed if selected_seed is None else selected_seed)
+    module.make_loader = lambda x_batch, y_batch, shuffle, selected_seed=None: original_make_loader(
+        x_batch, y_batch, shuffle, seed if selected_seed is None else selected_seed)
     module.PICTURE_DIR.mkdir(parents=True)
-    module.set_seed(42)
+    module.set_seed(seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     manifest = {
         "status": "running", "source_classification": str(TUNED_SOURCE),
         "classification_change": "same tuned model, aligned to historical 4,419-row population",
         "regression_change": "new one-output price head and fold-specific y StandardScaler; reconstructed baseline",
         "author_regression_implementation_recovered": False,
-        "seed": 42, "device": str(device), "task": task,
+        "seed": seed, "device": str(device), "task": task,
         "n_cleaned_rows": len(x), "n_expected_test_rows": len(expected),
         "classification_label": "(GOLD.diff() > 0)",
         "regression_label": "GOLD.shift(-1)",
@@ -139,7 +145,7 @@ def run(output_dir, task="both"):
             manifest["selected_classification_parameters"] = {
                 "optimizer": selected["optimizer"], "learning_rate": float(selected["lr"])}
         if task in ("regression", "both"):
-            run_regression(module, x, y_price, expected, splits, device, output_dir)
+            run_regression(module, x, y_price, expected, splits, device, output_dir, seed)
         manifest["status"] = "completed"
     except Exception as exc:
         manifest["status"] = "failed"
@@ -154,7 +160,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--task", choices=("classification", "regression", "both"),
                         default="both")
+    parser.add_argument("--seed", type=int, choices=(42, 43, 44), default=42)
     parser.add_argument("--output", type=Path, default=ROOT / "reconstructed_runs" /
                         f"cnn_lstm_{datetime.now():%Y%m%d_%H%M%S}")
     args = parser.parse_args()
-    print(run(args.output, task=args.task))
+    print(run(args.output, task=args.task, seed=args.seed))
