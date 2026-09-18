@@ -64,11 +64,19 @@ def make_tables(run_root, seeds):
     table8, table9 = [], []
     for model, label, source in MODELS:
         metrics = pd.concat([collected[model, seed] for seed in seeds], ignore_index=True)
+        rmse_seed_means = [collected[model, seed].rmse_usd_per_oz.mean() for seed in seeds]
+        mape_seed_means = [collected[model, seed].mape_percent.mean() for seed in seeds]
+        if len(seeds) == 1:
+            rmse_display = format_mean_std(metrics.rmse_usd_per_oz)
+            mape_display = format_mean_std(metrics.mape_percent)
+        else:
+            rmse_display = format_mean_std(rmse_seed_means)
+            mape_display = format_mean_std(mape_seed_means)
         table8.append({
             "Model": label,
             "Directional AUC mean": float(metrics.auc.mean()) if model != "random_walk" else np.nan,
-            "RMSE five-fold mean ± std (USD/oz)": format_mean_std(metrics.rmse_usd_per_oz),
-            "MAPE five-fold mean ± std (%)": format_mean_std(metrics.mape_percent),
+            "RMSE mean ± std (USD/oz)": rmse_display,
+            "MAPE mean ± std (%)": mape_display,
             "N predictions per seed": 3680,
             "N seeds": len(seeds),
             "Result source": source,
@@ -116,7 +124,9 @@ def build(run_root, output_dir):
         "These six tables are new results, not replacements for historical Table 8/9. "
         "Random Walk, CNN-LSTM regression, and without-FE are explicitly reconstructed baselines. "
         "Table 8/9 use the first unique 3,680 test predictions per seed and mean of five "
-        "fold metrics; the three-seed tables use 15 fold metrics. "
+        "fold metrics. Seed-42 Table 8 standard deviations describe five folds; the "
+        "three-seed Table 8 standard deviations describe the three five-fold seed means. "
+        "Table 9 reports the mean of three five-fold seed means. "
         "DM compares paired first-round full versus zero-FCNN daily losses, with Bartlett "
         "HAC lag 10 and a two-sided modified DM test. Three-seed DM averages each date's "
         "paired losses before testing; p-values are never averaged. Historical classification "
