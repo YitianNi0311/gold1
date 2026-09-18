@@ -198,6 +198,11 @@ def run(model, seed, output_dir):
                     json.dumps({"mean": fd["scaler_y"].mean_.tolist(),
                                 "scale": fd["scaler_y"].scale_.tolist()}), encoding="utf-8")
                 print(f"RMSE USD/oz={rmse:.4f}; MAPE %={mape:.4f}", flush=True)
+            # The historical scripts refit the unchanged OOF meta models
+            # between evaluation rounds. This is deterministic for each seed.
+            if round_number < rounds:
+                meta_reg, meta_clf = meta_models(
+                    reg_parts, reg_labels, clf_parts, clf_labels, seed)
         all_frames = [pd.read_csv(output_dir / f"round{round_number}_fold{fold}_predictions.csv",
                                   float_precision="round_trip")
                       for round_number in range(1, rounds + 1) for fold in range(1, 6)]
