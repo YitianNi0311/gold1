@@ -37,11 +37,12 @@ def seeded_optimizers(module, seed):
     def make_optimizer(task):
         objective = getattr(module, f"objective_lgbm_{task}")
         direction = "minimize" if task == "reg" else "maximize"
-        counter = [0]
 
         def optimize(x_train, y_train):
-            counter[0] += 1
-            sampler = optuna.samplers.TPESampler(seed=seed * 10000 + counter[0])
+            slot = getattr(module, "_search_slot", None)
+            if slot is None:
+                raise RuntimeError("Set the fold search slot before Optuna")
+            sampler = optuna.samplers.TPESampler(seed=seed * 10000 + slot)
             study = optuna.create_study(direction=direction, sampler=sampler)
             study.optimize(lambda trial: objective(trial, x_train, y_train), n_trials=50)
             return study.best_params
@@ -52,6 +53,7 @@ def seeded_optimizers(module, seed):
 
 
 def configure_module(module, model, seed):
+    module._search_slot = None
     seeded_optimizers(module, seed)
     if model == "no_fcnn":
         original_reg = module.build_regressors
@@ -132,7 +134,7 @@ def run(model, seed, output_dir):
         "optuna_trials_per_fold_per_task": 50,
         "optuna_objective_cv": 3,
         "optuna_objective_model_seed": 42,
-        "optuna_sampler_seed_rule": "seed*10000 + sequential optimization call",
+        "optuna_sampler_seed_rule": "seed*10000 + chronological_fold_slot (same slot for regression and classification)",
         "first_round_test_predictions": 3680,
         "classification_label": "(GOLD.diff() > 0)",
         "regression_label": "GOLD.shift(-1)",
@@ -158,6 +160,7 @@ def run(model, seed, output_dir):
                 reg_meta, clf_meta = saved["reg"], saved["clf"]
             else:
                 seed_everything(seed + fold)
+                source._search_slot = fold
                 fd = zero.prepare_fold(x, y_class, y_price, train, test)
                 print(f"{model} seed {seed}: OOF fold {fold}/5", flush=True)
                 reg_meta, clf_meta = train_fold(fd)
@@ -174,6 +177,7 @@ def run(model, seed, output_dir):
                 if path.exists():
                     continue
                 seed_everything(seed + 100 * round_number + fold)
+                source._search_slot = 5 + 5 * (round_number - 1) + fold
                 fd = zero.prepare_fold(x, y_class, y_price, train, test)
                 print(f"{model} seed {seed}: evaluation round {round_number}/{rounds}, fold {fold}/5", flush=True)
                 reg_meta, clf_meta = train_fold(fd)
