@@ -1,7 +1,7 @@
-"""Check that the rebuilt baselines line up with the seed-42 historical test rows (read-only).
+"""Check that the rebuilt models use the same test rows as the seed-42 historical runs.
 
-The old labels are kept as they were. Passing only means the test rows match; it does
-not remove the label or stacking leakage."""
+Dates and prices are compared with the saved reference. The classification label is the
+new next-day direction, so it is recomputed from prices instead of compared to the old one."""
 
 import hashlib
 import json
@@ -21,7 +21,7 @@ REFERENCE_MANIFEST = ROOT / "seed42_reference_targets_manifest.json"
 
 
 def aligned_data(data_path=DATA, reference_path=REFERENCE):
-    """Return the 4,419 original rows, but only after every test target checks out."""
+    """Return the 4,419 rows, but only after every test date, price and label checks out."""
     data_path, reference_path = Path(data_path), Path(reference_path)
     x, y_class, y_price = preprocess_data(data_path)
     if len(x) != 4419 or x.shape[1] != 48:
@@ -49,9 +49,13 @@ def aligned_data(data_path=DATA, reference_path=REFERENCE):
     columns = ["fold", "date", "y_true_class", "y_true_price"]
     if len(expected) != 3680 or len(saved) != 3680:
         raise ValueError("Expected exactly 3,680 historical test predictions")
-    if saved[columns[:3]].astype(str).reset_index(drop=True).equals(
-            expected[columns[:3]].astype(str)) is False:
-        raise ValueError("Historical fold, date, or classification labels differ")
+    if saved[columns[:2]].astype(str).reset_index(drop=True).equals(
+            expected[columns[:2]].astype(str)) is False:
+        raise ValueError("Historical fold or date layout differs")
+    gold_today = raw.loc[x.index, "GOLD"].to_numpy(dtype=float)
+    if not np.array_equal((y_price.to_numpy(dtype=float) > gold_today).astype(int),
+                          y_class.to_numpy(dtype=int)):
+        raise ValueError("Classification label is not the next-day direction")
     if not np.allclose(saved.y_true_price, expected.y_true_price, rtol=0, atol=1e-8):
         raise ValueError("Historical true gold prices differ")
     if expected.duplicated(["fold", "date"]).any():

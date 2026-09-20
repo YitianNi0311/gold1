@@ -46,11 +46,11 @@ def run(model, seed, output_dir):
     manifest_path = output_dir / "run_manifest.json"
     manifest = dict(status="running", model=model, seed=seed, n_cleaned_rows=4419,
                     n_test_predictions=3680, data_sha256=hashlib.sha256(DATA.read_bytes()).hexdigest(),
-                    regression_target="GOLD.shift(-1)", classification_target="(GOLD.diff() > 0)",
+                    regression_target="GOLD.shift(-1)", classification_target="(GOLD.shift(-1) > GOLD)",
                     regression_unit="USD/oz", mape_unit="%",
                     persistence_reconstruction=model == "random_walk",
                     original_author_implementation=model != "random_walk",
-                    historical_leakage_note="Historical classification label remains leaky.")
+                    note="All five folds are computed; the tables use folds 2-5.")
     if manifest_path.exists():
         old = json.loads(manifest_path.read_text(encoding="utf-8"))
         if any(old[k] != manifest[k] for k in ("model", "seed", "data_sha256")):

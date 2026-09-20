@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from protocol import EVAL_FOLDS, FOLD_SIZE
 from diebold_mariano import average_seed_losses, dm_test, paired_losses, summarize
 
 
@@ -30,12 +31,12 @@ class DieboldMarianoTests(unittest.TestCase):
             dm_test(np.ones(50), np.ones(50))
 
     def test_prediction_gate_checks_dates_targets_and_three_seeds(self):
-        n = 3680
+        n = len(EVAL_FOLDS) * FOLD_SIZE
         dates = pd.date_range("2006-01-01", periods=n, freq="B").strftime("%Y-%m-%d")
         gold = 100 + np.arange(n) * 0.1
         labels = np.arange(n) % 2
         base = pd.DataFrame({
-            "fold": np.repeat(np.arange(1, 6), 736), "date": dates,
+            "fold": np.repeat(EVAL_FOLDS, FOLD_SIZE), "date": dates,
             "row_index": np.arange(n) + 30,
             "y_true_class": labels, "y_true_price_original": gold,
             "y_pred_class": labels,
@@ -57,7 +58,7 @@ class DieboldMarianoTests(unittest.TestCase):
             zero.to_csv(zero_path, index=False)
             reference.to_csv(ref_path, index=False)
             losses = paired_losses(full_path, zero_path, ref_path)
-            self.assertEqual(len(losses), 3680)
+            self.assertEqual(len(losses), n)
             self.assertEqual(len(summarize(losses)), 5)
             mean_losses = average_seed_losses({42: losses, 43: losses, 44: losses})
             pd.testing.assert_frame_equal(mean_losses, losses[mean_losses.columns])

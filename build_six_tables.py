@@ -9,6 +9,7 @@ import pandas as pd
 
 from diebold_mariano import save_dm_tables
 from historical_alignment import REFERENCE, aligned_data
+from protocol import EVAL_FOLDS, FOLD_SIZE
 
 
 MODELS = (
@@ -23,12 +24,16 @@ MODELS = (
 )
 
 
+def only_eval_folds(frame):
+    return frame.loc[frame.fold.isin(EVAL_FOLDS)].reset_index(drop=True)
+
+
 def validate_targets(frame, expected, expected_positions, *, price_column, class_column):
-    if len(frame) != 3680 or not np.array_equal(frame.fold.to_numpy(), expected.fold.to_numpy()) or not np.array_equal(
+    if len(frame) != len(EVAL_FOLDS) * FOLD_SIZE or not np.array_equal(frame.fold.to_numpy(), expected.fold.to_numpy()) or not np.array_equal(
             pd.to_datetime(frame.date).dt.strftime("%Y-%m-%d"), expected.date):
-        raise ValueError("Fold or daily test dates differ from the historical reference")
+        raise ValueError("Fold or daily test dates differ from the reference")
     if not np.array_equal(frame[class_column].to_numpy(dtype=int), expected.y_true_class.to_numpy(dtype=int)):
-        raise ValueError("Daily classification truths differ from the historical reference")
+        raise ValueError("Daily classification truths differ from the expected labels")
     if not np.allclose(frame[price_column], expected.y_true_price, rtol=0, atol=1e-8):
         raise ValueError("Daily original gold prices differ from the historical reference")
     if "row_index" in frame and not np.array_equal(
@@ -37,6 +42,8 @@ def validate_targets(frame, expected, expected_positions, *, price_column, class
 
 
 def read_metrics(run_root, model, seed, expected, expected_positions):
+    keep = expected.fold.isin(EVAL_FOLDS).to_numpy()
+    expected, expected_positions = only_eval_folds(expected), expected_positions[keep]
     folder = run_root / f"seed{seed}" / model
     manifest = json.loads((folder / "run_manifest.json").read_text(encoding="utf-8"))
     if manifest["status"] != "completed" or manifest.get("seed") != seed:
@@ -46,23 +53,22 @@ def read_metrics(run_root, model, seed, expected, expected_positions):
         clf = pd.read_csv(folder / "classification_fold_metrics.csv")
         metrics = reg.merge(clf[["fold", "accuracy", "precision", "recall", "f1", "auc"]],
                             on="fold", validate="one_to_one")
-        regression = pd.read_csv(folder / "regression_predictions.csv")
-        classification = pd.read_csv(folder / "classification_predictions.csv")
+        regression = only_eval_folds(pd.read_csv(folder / "regression_predictions.csv"))
+        classification = only_eval_folds(pd.read_csv(folder / "classification_predictions.csv"))
         validate_targets(regression, expected, expected_positions,
                          price_column="y_true_price", class_column="y_true_class")
         validate_targets(classification, expected, expected_positions,
                          price_column="y_true_price", class_column="y_true")
     else:
         metrics = pd.read_csv(folder / "fold_metrics.csv")
-        if "round" in metrics:
-            metrics = metrics.loc[metrics["round"].eq(1)]
-        predictions = pd.read_csv(folder / "predictions.csv")
+        predictions = only_eval_folds(pd.read_csv(folder / "predictions.csv"))
         validate_targets(predictions, expected, expected_positions,
                          price_column="y_true_price_original", class_column="y_true_class")
-    if metrics.groupby("fold").size().to_dict() != dict.fromkeys(range(1, 6), 1):
-        raise ValueError(f"Incorrect five-fold metrics: {folder}")
-    if len(metrics) != 5 or metrics.fold.tolist() != [1, 2, 3, 4, 5]:
-        raise ValueError(f"Expected five chronological folds: {folder}")
+    metrics = metrics.loc[metrics.fold.isin(EVAL_FOLDS)].reset_index(drop=True)
+    if metrics.groupby("fold").size().to_dict() != dict.fromkeys(EVAL_FOLDS, 1):
+        raise ValueError(f"Incorrect per-fold metrics: {folder}")
+    if metrics.fold.tolist() != list(EVAL_FOLDS):
+        raise ValueError(f"Expected chronological folds {EVAL_FOLDS}: {folder}")
     return metrics
 
 
@@ -93,10 +99,10 @@ def make_tables(run_root, seeds, expected, expected_positions):
             "Directional AUC mean": float(metrics.auc.mean()) if model != "random_walk" else np.nan,
             "RMSE mean ± std (USD/oz)": rmse_display,
             "MAPE mean ± std (%)": mape_display,
-            "N predictions per seed": 3680,
+            "N predictions per seed": len(EVAL_FOLDS) * FOLD_SIZE,
             "N seeds": len(seeds),
             "Result source": source,
-            "Status": "new aligned rerun; historical leakage retained",
+            "Status": "next-day label; meta model trained on earlier folds only",
         })
         if model != "random_walk":
             table9.append({
@@ -106,7 +112,7 @@ def make_tables(run_root, seeds, expected, expected_positions):
                 "Recall": float(metrics.recall.mean()),
                 "F1": float(metrics.f1.mean()),
                 "Seed(s)": ",".join(map(str, seeds)),
-                "Status": source + "; historical leakage retained",
+                "Status": source + "; next-day label; meta model trained on earlier folds only",
             })
     return pd.DataFrame(table8), pd.DataFrame(table9)
 
@@ -137,19 +143,6 @@ def build(run_root, output_dir):
     with pd.ExcelWriter(output_dir / "six_tables.xlsx", engine="openpyxl") as writer:
         for name, frame in sheets.items():
             frame.to_excel(writer, sheet_name=name[:31], index=False)
-    (output_dir / "README.md").write_text(
-        "# New aligned rerun tables\n\n"
-        "These six tables are new results, not replacements for historical Table 8/9. "
-        "Random Walk, CNN-LSTM regression, and without-FE are explicitly reconstructed baselines. "
-        "Table 8/9 use the first unique 3,680 test predictions per seed and mean of five "
-        "fold metrics. Seed-42 Table 8 standard deviations describe five folds; the "
-        "three-seed Table 8 standard deviations describe the three five-fold seed means. "
-        "Table 9 reports the mean of three five-fold seed means. "
-        "DM compares paired first-round full versus zero-FCNN daily losses, with Bartlett "
-        "HAC lag 10 and a two-sided modified DM test. Three-seed DM averages each date's "
-        "paired losses before testing; p-values are never averaged. Historical classification "
-        "labels and meta-evaluation leakage remain, so these are not leakage-free next-day scores.\n",
-        encoding="utf-8")
     return sheets
 
 

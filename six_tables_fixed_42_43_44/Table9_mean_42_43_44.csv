@@ -1,0 +1,8 @@
+﻿Model,Accuracy,Precision,Recall,F1,Seed(s),Status
+Random Forest,0.50362318840579701,0.57819967630072211,0.44255838376280027,0.43019591566507326,"42,43,44",original project tree script; next-day label; meta model trained on earlier folds only
+XGBoost,0.51494565217391297,0.53989997849434801,0.50999198800526535,0.5193255083136753,"42,43,44",original project tree script; next-day label; meta model trained on earlier folds only
+LightGBM,0.51505887681159412,0.53797133325775837,0.5897619846038461,0.55589416905317068,"42,43,44",original project tree script; next-day label; meta model trained on earlier folds only
+CNN-LSTM,0.50475543478260876,0.51963770209470295,0.53956345723505839,0.48169681918090063,"42,43,44",aligned classifier and new regression head; next-day label; meta model trained on earlier folds only
+BFNE-Net without FE,0.49603713768115937,0.51178984687742446,0.55801175592915209,0.48894814208032522,"42,43,44",new paper-defined reconstruction; next-day label; meta model trained on earlier folds only
+BFNE-Net without FCNNs,0.4970561594202898,0.52156458322234656,0.48997031782593475,0.49896919295919356,"42,43,44",three-tree implementation; next-day label; meta model trained on earlier folds only
+BFNE-Net,0.50056612318840576,0.51728513110827357,0.48740646912804114,0.48569339575416032,"42,43,44",full implementation; next-day label; meta model trained on earlier folds only

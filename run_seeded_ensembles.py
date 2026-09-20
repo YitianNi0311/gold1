@@ -1,7 +1,10 @@
-"""Seeded reruns of the BFNE stacking runs, checkpointed per fold.
+"""Seeded runs of the BFNE stacking models, checkpointed per fold.
 
-The old labels and meta-model evaluation leakage are kept on purpose. A resumed run
-uses the same per-fold seed."""
+Base models for fold k are trained on the data before fold k and predict fold k. The meta
+model used to score fold k is trained only on the out-of-fold predictions of the earlier
+folds, so it never sees a label from the block it predicts. Fold 1 therefore only feeds
+the first meta model and the models are scored on folds 2-5. A resumed run uses the same
+per-fold seed."""
 
 import argparse
 import hashlib
@@ -19,6 +22,7 @@ from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_sc
 
 import BFNE_Net_without_FCNNs as zero
 from historical_alignment import DATA, ROOT, aligned_data
+from protocol import EVAL_FOLDS, FOLD_SIZE
 from BFNE_Net_without_FE import audit_features, load_full_model_source, train_fold as full_train_fold
 from regression_scale_utils import regression_metrics_original_price
 
@@ -97,6 +101,16 @@ def meta_models(reg_features, reg_labels, clf_features, clf_labels, seed):
     return reg, clf
 
 
+def forward_meta_models(blocks, fold, seed):
+    """Meta models for `fold`, fit only on the out-of-fold blocks that come before it."""
+    earlier = [b for b in blocks if b["fold"] < fold]
+    if not earlier:
+        raise ValueError("The first block has no earlier data to train a meta model on")
+    return meta_models([b["reg"] for b in earlier], np.concatenate([b["reg_labels"] for b in earlier]),
+                       [b["clf"] for b in earlier], np.concatenate([b["clf_labels"] for b in earlier]),
+                       seed)
+
+
 def class_metrics(y, pred, probability):
     return {
         "accuracy": float(accuracy_score(y, pred)),
@@ -111,7 +125,7 @@ def record(path, frame):
     frame.to_csv(path, index=False, encoding="utf-8-sig", float_format="%.17g")
 
 
-def run(model, seed, output_dir, evaluation_rounds=5):
+def run(model, seed, output_dir):
     if model not in ("full", "no_fcnn", "without_fe") or seed not in (42, 43, 44):
         raise ValueError("Unsupported model or seed")
     output_dir = Path(output_dir).resolve()
@@ -120,7 +134,6 @@ def run(model, seed, output_dir, evaluation_rounds=5):
     source = zero if model == "no_fcnn" else load_full_model_source()
     configure_module(source, model, seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    rounds = 1 if model == "without_fe" else evaluation_rounds
     output_dir.mkdir(parents=True, exist_ok=True)
     manifest_file = output_dir / "run_manifest.json"
     manifest = {
@@ -129,16 +142,16 @@ def run(model, seed, output_dir, evaluation_rounds=5):
         "paper_reconstruction": model == "without_fe",
         "n_cleaned_rows": 4419, "n_features": x.shape[1],
         "deleted_engineered_features": deleted,
-        "outer_folds": 5, "evaluation_rounds": rounds,
+        "outer_folds": 5, "evaluation_folds": list(EVAL_FOLDS),
         "optuna_trials_per_fold_per_task": 50,
         "optuna_objective_cv": 3,
         "optuna_objective_model_seed": 42,
         "optuna_sampler_seed_rule": "seed*10000 + chronological_fold_slot (same slot for regression and classification)",
-        "first_round_test_predictions": 3680,
-        "classification_label": "(GOLD.diff() > 0)",
+        "classification_label": "(GOLD.shift(-1) > GOLD)",
         "regression_label": "GOLD.shift(-1)",
+        "optuna_inner_cv": "TimeSeriesSplit(3)",
         "regression_unit": "USD/oz", "mape_unit": "%",
-        "leakage_note": "Historical classification-label and stacking evaluation leakage remain.",
+        "protocol": "meta model for fold k trained on out-of-fold blocks before k only",
         "device": str(device),
         "data_sha256": hashlib.sha256(DATA.read_bytes()).hexdigest(),
         "started_utc": datetime.now(timezone.utc).isoformat(),
@@ -151,8 +164,9 @@ def run(model, seed, output_dir, evaluation_rounds=5):
     manifest_file.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     train_fold = source.train_fold if model == "no_fcnn" else lambda fd: full_train_fold(source, fd, device)
     try:
-        reg_parts, reg_labels, clf_parts, clf_labels = [], [], [], []
+        blocks = []
         for fold, (train, test) in enumerate(splits, 1):
+            fd = zero.prepare_fold(x, y_class, y_price, train, test)
             checkpoint = output_dir / f"oof_fold{fold}.npz"
             if checkpoint.exists():
                 saved = np.load(checkpoint)
@@ -160,73 +174,49 @@ def run(model, seed, output_dir, evaluation_rounds=5):
             else:
                 seed_everything(seed + fold)
                 source._search_slot = fold
-                fd = zero.prepare_fold(x, y_class, y_price, train, test)
-                print(f"{model} seed {seed}: OOF fold {fold}/5", flush=True)
+                print(f"{model} seed {seed}: base models, fold {fold}/5", flush=True)
                 reg_meta, clf_meta = train_fold(fd)
                 np.savez_compressed(checkpoint, reg=reg_meta, clf=clf_meta)
-            fd = zero.prepare_fold(x, y_class, y_price, train, test)
-            reg_parts.append(reg_meta)
-            reg_labels.extend(fd["yr_test_fit"])
-            clf_parts.append(clf_meta)
-            clf_labels.extend(fd["yc_test"].to_numpy())
-        meta_reg, meta_clf = meta_models(reg_parts, reg_labels, clf_parts, clf_labels, seed)
-        for round_number in range(1, rounds + 1):
-            for fold, (train, test) in enumerate(splits, 1):
-                path = output_dir / f"round{round_number}_fold{fold}_predictions.csv"
-                if path.exists():
-                    continue
-                seed_everything(seed + 100 * round_number + fold)
-                source._search_slot = 5 + 5 * (round_number - 1) + fold
-                fd = zero.prepare_fold(x, y_class, y_price, train, test)
-                print(f"{model} seed {seed}: evaluation round {round_number}/{rounds}, fold {fold}/5", flush=True)
-                reg_meta, clf_meta = train_fold(fd)
-                pred_fit = meta_reg.predict(reg_meta)
-                pred_price, rmse, mape = regression_metrics_original_price(
-                    fd["yr_test"], pred_fit, prediction_scaler=fd["scaler_y"])
-                pred_class = meta_clf.predict(clf_meta)
-                probability = meta_clf.predict_proba(clf_meta)[:, 1]
-                frame = expected.loc[expected.fold.eq(fold)].copy().reset_index(drop=True)
-                if not np.array_equal(frame.y_true_class, fd["yc_test"].to_numpy()) or not np.allclose(
-                        frame.y_true_price, fd["yr_test"], rtol=0, atol=1e-8):
-                    raise ValueError("Historical truth mismatch")
-                frame.insert(0, "round", round_number)
-                frame["row_index"] = x.index[test].to_numpy()
-                frame["y_true_price_original"] = frame.pop("y_true_price")
-                frame["y_pred_price_original"] = pred_price
-                frame["y_pred_price_scaled"] = pred_fit
-                frame["y_pred_class"] = pred_class
-                frame["y_pred_probability"] = probability
-                record(path, frame)
-                (output_dir / f"round{round_number}_scaler_y_fold{fold}.json").write_text(
-                    json.dumps({"mean": fd["scaler_y"].mean_.tolist(),
-                                "scale": fd["scaler_y"].scale_.tolist()}), encoding="utf-8")
-                print(f"RMSE USD/oz={rmse:.4f}; MAPE %={mape:.4f}", flush=True)
-            # the original scripts refit the OOF meta models between evaluation rounds,
-            # which is deterministic for a given seed.
-            if round_number < rounds:
-                meta_reg, meta_clf = meta_models(
-                    reg_parts, reg_labels, clf_parts, clf_labels, seed)
-        all_frames = [pd.read_csv(output_dir / f"round{round_number}_fold{fold}_predictions.csv",
-                                  float_precision="round_trip")
-                      for round_number in range(1, rounds + 1) for fold in range(1, 6)]
-        first = pd.concat(all_frames[:5], ignore_index=True)
-        if len(first) != 3680 or first.groupby("fold").size().to_dict() != dict.fromkeys(range(1, 6), 736):
-            raise ValueError("First-round predictions are not 5 x 736")
-        record(output_dir / "predictions.csv", first)
-        record(output_dir / "all_round_predictions.csv", pd.concat(all_frames, ignore_index=True))
-        rows = []
-        for frame in all_frames:
-            _, rmse, mape = regression_metrics_original_price(frame.y_true_price_original,
-                                                                 frame.y_pred_price_original)
-            row = {"round": int(frame["round"].iat[0]), "fold": int(frame.fold.iat[0]),
-                   "rmse_usd_per_oz": rmse, "mape_percent": mape}
-            if row["round"] == 1:
-                row.update(class_metrics(frame.y_true_class, frame.y_pred_class,
-                                         frame.y_pred_probability))
-            rows.append(row)
+            # every fold has its own y scaler, so put the regression meta-features and labels
+            # back in USD/oz before stacking; the meta model then sees one common scale
+            scaler = fd["scaler_y"]
+            blocks.append(dict(fold=fold, test=test, fd=fd,
+                               reg=reg_meta * scaler.scale_[0] + scaler.mean_[0], clf=clf_meta,
+                               reg_labels=np.asarray(fd["yr_test"], dtype=float),
+                               clf_labels=fd["yc_test"].to_numpy()))
+        frames, rows = [], []
+        for block in blocks:
+            fold, fd = block["fold"], block["fd"]
+            if fold not in EVAL_FOLDS:
+                continue
+            meta_reg, meta_clf = forward_meta_models(blocks, fold, seed)
+            pred_price, rmse, mape = regression_metrics_original_price(
+                fd["yr_test"], meta_reg.predict(block["reg"]))
+            pred_class = meta_clf.predict(block["clf"])
+            probability = meta_clf.predict_proba(block["clf"])[:, 1]
+            frame = expected.loc[expected.fold.eq(fold)].copy().reset_index(drop=True)
+            if not np.array_equal(frame.y_true_class, fd["yc_test"].to_numpy()) or not np.allclose(
+                    frame.y_true_price, fd["yr_test"], rtol=0, atol=1e-8):
+                raise ValueError("Test truth mismatch")
+            frame["row_index"] = x.index[block["test"]].to_numpy()
+            frame["y_true_price_original"] = frame.pop("y_true_price")
+            frame["y_pred_price_original"] = pred_price
+            frame["y_pred_class"] = pred_class
+            frame["y_pred_probability"] = probability
+            record(output_dir / f"fold{fold}_predictions.csv", frame)
+            (output_dir / f"scaler_y_fold{fold}.json").write_text(
+                json.dumps({"mean": fd["scaler_y"].mean_.tolist(),
+                            "scale": fd["scaler_y"].scale_.tolist()}), encoding="utf-8")
+            rows.append({"fold": fold, "rmse_usd_per_oz": rmse, "mape_percent": mape,
+                         **class_metrics(frame.y_true_class, pred_class, probability)})
+            frames.append(frame)
+            print(f"{model} seed {seed} fold {fold}: RMSE USD/oz={rmse:.4f}; MAPE %={mape:.4f}", flush=True)
+        predictions = pd.concat(frames, ignore_index=True)
+        if len(predictions) != len(EVAL_FOLDS) * FOLD_SIZE:
+            raise ValueError("Unexpected number of test predictions")
+        record(output_dir / "predictions.csv", predictions)
         record(output_dir / "fold_metrics.csv", pd.DataFrame(rows))
-        manifest.update(status="completed", n_first_round_predictions=3680,
-                        n_all_round_predictions=sum(len(f) for f in all_frames),
+        manifest.update(status="completed", n_test_predictions=len(predictions),
                         completed_utc=datetime.now(timezone.utc).isoformat())
     except Exception as exc:
         manifest.update(status="failed", error=str(exc))
@@ -241,7 +231,5 @@ if __name__ == "__main__":
     parser.add_argument("--model", choices=("full", "no_fcnn", "without_fe"), required=True)
     parser.add_argument("--seed", type=int, choices=(42, 43, 44), required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--rounds", type=int, default=5, choices=(1, 2, 3, 4, 5),
-                        help="Evaluation rounds; tables use round 1 only")
     args = parser.parse_args()
-    run(args.model, args.seed, args.output, args.rounds)
+    run(args.model, args.seed, args.output)

@@ -18,7 +18,7 @@ def preprocess_data(file_path):
         data['Date'] = pd.to_datetime(data['Date'])
 
     # targets
-    data['Next_Day_Change'] = (data['GOLD'].diff() > 0).astype(int)
+    data['Next_Day_Change'] = (data['GOLD'].shift(-1) > data['GOLD']).astype(int)
 
     # feature engineering
     # lag features (history only, no shift needed)

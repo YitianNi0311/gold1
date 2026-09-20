@@ -4,18 +4,24 @@
 
 Three seeds: **42, 43, 44**.
 
-- Neural nets and numpy/random: `seed + 100 * evaluation_round + fold`
-- Optuna (TPE sampler): `seed * 10000 + fold_slot`
+- Neural nets and numpy/random: `seed + fold`
+- Optuna (TPE sampler): `seed * 10000 + fold`
 - `random_state` of the final tree models: the seed itself
 - The LightGBM inside the Optuna objective always uses `random_state=42`
-- Only the first evaluation round is used, five folds
 
 ## Data and splits
 
 - `GOLD_cleaned.xlsx`, 4,419 rows after cleaning, 48 features
-- `TimeSeriesSplit(n_splits=5)`, 736 test rows per fold, 3,680 test predictions in total
-- Classification label: `GOLD.diff() > 0`; regression label: `GOLD.shift(-1)`
+- `TimeSeriesSplit(n_splits=5)`, 736 rows per test fold
+- Classification label: `GOLD.shift(-1) > GOLD` (next-day direction); regression label: `GOLD.shift(-1)` (next-day price)
 - Features are standardized; the regression target is standardized with a scaler fit on each training fold and inverted back to raw prices for evaluation
+
+## Evaluation protocol
+
+- Base models for fold k are trained on the data before fold k and predict fold k (out-of-fold predictions).
+- The meta learner that scores fold k is trained only on the out-of-fold predictions of folds 1 to k-1, so it never sees a label from the block it predicts.
+- Fold 1 therefore only trains the first meta learner; every model in the tables is scored on folds 2-5 (4 x 736 = 2,944 predictions per seed).
+- The Optuna search for LightGBM uses a 3-split `TimeSeriesSplit` inside each training fold.
 
 ## Neural networks (FCNN1 / FCNN2)
 
@@ -44,7 +50,6 @@ Three seeds: **42, 43, 44**.
 
 GradientBoosting, n_estimators=300, learning_rate=0.15, max_depth=5.
 Inputs: full BFNE-Net uses 5 features for regression and 10 for classification; the version without FCNNs uses 3 and 6.
-The meta learner is fit on the five-fold OOF predictions first, then evaluated on the same five folds.
 
 ## CNN-LSTM
 

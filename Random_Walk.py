@@ -43,8 +43,8 @@ def run(output_dir):
         "formula": "prediction at row t = GOLD_t; target = GOLD_(t+1)",
         "n_cleaned_rows": len(x), "n_test_predictions": len(all_predictions),
         "reference": str(REFERENCE),
-        "historical_classification_label": "(GOLD.diff() > 0)",
-        "historical_leakage_note": "The existing Table 8/9 results retain known label and meta-evaluation leakage.",
+        "classification_label": "(GOLD.shift(-1) > GOLD)",
+        "note": "Standalone script; the tables use folds 2-5.",
     }, ensure_ascii=False, indent=2), encoding="utf-8")
     return output_dir
 

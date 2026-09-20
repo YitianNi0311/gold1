@@ -6,17 +6,19 @@ import numpy as np
 import pandas as pd
 
 from build_six_tables import validate_targets
+from protocol import EVAL_FOLDS, FOLD_SIZE
 
 
 class TargetAlignmentTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.positions = np.arange(3680)
+        n = len(EVAL_FOLDS) * FOLD_SIZE
+        cls.positions = np.arange(n)
         cls.expected = pd.DataFrame({
-            "fold": np.repeat(np.arange(1, 6), 736),
-            "date": pd.date_range("2000-01-01", periods=3680).strftime("%Y-%m-%d"),
-            "y_true_class": np.arange(3680) % 2,
-            "y_true_price": np.arange(3680, dtype=float) + 100,
+            "fold": np.repeat(EVAL_FOLDS, FOLD_SIZE),
+            "date": pd.date_range("2000-01-01", periods=n).strftime("%Y-%m-%d"),
+            "y_true_class": np.arange(n) % 2,
+            "y_true_price": np.arange(n, dtype=float) + 100,
         })
 
     def frame(self):

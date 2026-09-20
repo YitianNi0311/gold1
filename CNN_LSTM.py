@@ -114,9 +114,9 @@ def run(output_dir, task="both", seed=42):
         "author_regression_implementation_recovered": False,
         "seed": seed, "device": str(device), "task": task,
         "n_cleaned_rows": len(x), "n_expected_test_rows": len(expected),
-        "classification_label": "(GOLD.diff() > 0)",
+        "classification_label": "(GOLD.shift(-1) > GOLD)",
         "regression_label": "GOLD.shift(-1)",
-        "leakage_note": "Historical classification label leaks via gold-derived inputs.",
+        "note": "All five folds are computed; the tables use folds 2-5.",
     }
     path = output_dir / "run_manifest.json"
     path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")

@@ -51,59 +51,13 @@ class RegressionScaleTests(unittest.TestCase):
             self.assertAlmostEqual(mape_scaled_path, mape_direct)
 
     def test_static_final_paths(self):
-        bfne = (ROOT / "BFNE_Net.py").read_text(encoding="utf-8")
-        self.assertEqual(bfne.count("regression_metrics_original_price("), 5)
-        self.assertNotIn(
-            "mean_absolute_percentage_error_custom(y_test_reg_scaled, fold_meta_preds_reg_scaled)",
-            bfne,
-        )
+        runner = (ROOT / "run_seeded_ensembles.py").read_text(encoding="utf-8")
+        self.assertIn('fd["yr_test"], meta_reg.predict(block["reg"])', runner)
         for name in ("Random_Forest.py", "XGBoost.py", "LightGBM.py"):
             text = (ROOT / name).read_text(encoding="utf-8")
             self.assertIn("regression_metrics_original_price(", text)
             self.assertIn("RMSE (USD/oz)", text)
             self.assertIn("MAPE (%)", text)
-
-    def test_local_runner_scale_and_zero_fcnn(self):
-        runner = (ROOT / "run_no_fcnn.py").read_text(encoding="utf-8")
-        self.assertIn(
-            'fd["yr_test"], pred_fit, prediction_scaler=fd["scaler_y"]',
-            runner,
-        )
-        self.assertNotIn(
-            'fd["scaler_y"].inverse_transform(pred_fit.reshape(-1, 1))',
-            runner,
-        )
-        self.assertIn('"mape_percent": mape', runner)
-        self.assertIn("from BFNE_Net_without_FCNNs import", runner)
-        zero = ast.parse((ROOT / "BFNE_Net_without_FCNNs.py").read_text(encoding="utf-8"))
-        for name, expected in (
-            ("build_regressors", ["LGBMRegressor", "XGBRegressor", "RandomForestRegressor"]),
-            ("build_classifiers", ["LGBMClassifier", "XGBClassifier", "RandomForestClassifier"]),
-        ):
-            function = next(n for n in zero.body if isinstance(n, ast.FunctionDef) and n.name == name)
-            returned = next(n for n in function.body if isinstance(n, ast.Return))
-            self.assertEqual([n.func.id for n in returned.value.elts], expected)
-
-    def test_every_final_block_restores_once_with_its_fold_scaler(self):
-        tree = ast.parse((ROOT / "BFNE_Net.py").read_text(encoding="utf-8"))
-        assignments = [n for n in ast.walk(tree) if isinstance(n, ast.Assign)
-                       and isinstance(n.value, ast.Call) and isinstance(n.value.func, ast.Name)
-                       and n.value.func.id == "regression_metrics_original_price"]
-        self.assertEqual(len(assignments), 5)
-        for block, assignment in enumerate(assignments, 1):
-            for train in ([80., 100., 120.], [900., 1200., 1500.]):
-                with self.subTest(block=block, train=train):
-                    scaler = StandardScaler().fit(np.array(train).reshape(-1, 1))
-                    scaled = scaler.transform(np.array([110., 180.]).reshape(-1, 1)).ravel()
-                    spy = Mock(wraps=scaler)
-                    namespace = dict(regression_metrics_original_price=regression_metrics_original_price,
-                                     y_test_reg_fold=pd.Series([100., 200.]),
-                                     fold_meta_preds_reg_scaled=scaled, scaler_y_reg_eval=spy)
-                    exec(compile(ast.Module(body=[assignment], type_ignores=[]), "final_block", "exec"), namespace)
-                    np.testing.assert_allclose(namespace["fold_meta_preds_reg"], [110., 180.])
-                    self.assertAlmostEqual(namespace["rmse"], np.sqrt(250.))
-                    self.assertAlmostEqual(namespace["mape"], 10.)
-                    spy.inverse_transform.assert_called_once()
 
     def test_tree_raw_targets_and_console_csv_units(self):
         for filename, function, prefix in (

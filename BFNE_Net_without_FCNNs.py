@@ -14,7 +14,7 @@ from sklearn.ensemble import (
     GradientBoostingClassifier, GradientBoostingRegressor,
     RandomForestClassifier, RandomForestRegressor,
 )
-from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 from sklearn.preprocessing import StandardScaler, RobustScaler
 from xgboost import XGBClassifier, XGBRegressor
 
@@ -27,8 +27,8 @@ def preprocess_data(file_path):
     if not np.issubdtype(data['Date'].dtype, np.datetime64):
         data['Date'] = pd.to_datetime(data['Date'])
 
-    # old label: is today's gold price up vs yesterday
-    data['Next_Day_Change'] = (data['GOLD'].diff() > 0).astype(int)
+    # class label: 1 if tomorrow's gold price is above today's
+    data['Next_Day_Change'] = (data['GOLD'].shift(-1) > data['GOLD']).astype(int)
 
     # regression target: next day's gold price
     data['Next_Day_Price'] = data['GOLD'].shift(-1)
@@ -172,7 +172,7 @@ def objective_lgbm_reg(trial, X_train, y_train):
     }
 
     lgbm = LGBMRegressor(**param)
-    score = cross_val_score(lgbm, X_train, y_train, cv=3, scoring='neg_mean_squared_error').mean()
+    score = cross_val_score(lgbm, X_train, y_train, cv=TimeSeriesSplit(n_splits=3), scoring='neg_mean_squared_error').mean()
     return -score
 
 
@@ -201,7 +201,7 @@ def objective_lgbm_clf(trial, X_train, y_train):
     }
 
     lgbm = LGBMClassifier(**param)
-    score = cross_val_score(lgbm, X_train, y_train, cv=3, scoring='roc_auc').mean()
+    score = cross_val_score(lgbm, X_train, y_train, cv=TimeSeriesSplit(n_splits=3), scoring='roc_auc').mean()
     return score
 
 

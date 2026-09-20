@@ -1,14 +1,15 @@
 """Paired Diebold-Mariano tests, full BFNE-Net vs the version without FCNNs.
 
-One forecast per fold and date. A positive loss difference means the full model has
-the larger loss. The old label / meta-model leakage is still in, so the p-values only
-describe the saved error series, not leakage-free forecasting skill."""
+One forecast per date on folds 2-5. A positive loss difference means the full model has
+the larger loss."""
 
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from scipy.stats import t as student_t
+
+from protocol import EVAL_FOLDS, FOLD_SIZE
 
 
 KEYS = ("fold", "date", "row_index")
@@ -61,9 +62,10 @@ def _read_predictions(path):
         raise ValueError(f"Missing prediction columns in {path}: {sorted(missing)}")
     frame = frame.loc[:, list(KEYS + TARGETS + PREDICTIONS)].copy()
     frame["date"] = pd.to_datetime(frame.date).dt.strftime("%Y-%m-%d")
-    frame = frame.sort_values(list(KEYS)).reset_index(drop=True)
-    if len(frame) != 3680 or frame.groupby("fold").size().to_dict() != dict.fromkeys(range(1, 6), 736):
-        raise ValueError(f"Expected five folds of 736 predictions in {path}")
+    frame = frame.loc[frame.fold.isin(EVAL_FOLDS)].sort_values(list(KEYS)).reset_index(drop=True)
+    if len(frame) != len(EVAL_FOLDS) * FOLD_SIZE or frame.groupby("fold").size().to_dict() != dict.fromkeys(
+            EVAL_FOLDS, FOLD_SIZE):
+        raise ValueError(f"Expected {len(EVAL_FOLDS)} folds of {FOLD_SIZE} predictions in {path}")
     if frame.duplicated(list(KEYS)).any() or frame.isna().any().any():
         raise ValueError(f"Duplicate or missing prediction values in {path}")
     numbers = frame.select_dtypes(include="number")
@@ -89,12 +91,11 @@ def paired_losses(full_path, zero_path, reference_path):
         raise ValueError("Full and zero-FCNN true targets differ")
     reference = pd.read_csv(reference_path, float_precision="round_trip")
     reference["date"] = pd.to_datetime(reference.date).dt.strftime("%Y-%m-%d")
-    reference = reference.sort_values(["fold", "date"]).reset_index(drop=True)
+    reference = reference.loc[reference.fold.isin(EVAL_FOLDS)].sort_values(["fold", "date"]).reset_index(drop=True)
     if len(reference) != len(full) or not reference[["fold", "date"]].equals(
-            full[["fold", "date"]]) or not reference.y_true_class.equals(
-            full.y_true_class) or not np.allclose(
+            full[["fold", "date"]]) or not np.allclose(
             reference.y_true_price, full.y_true_price_original, rtol=0, atol=1e-8):
-        raise ValueError("Predictions do not match the saved historical test targets")
+        raise ValueError("Predictions do not match the saved test dates and prices")
     output = full.loc[:, KEYS].copy()
     truth = full.y_true_price_original.to_numpy(dtype=float)
     labels = full.y_true_class.to_numpy(dtype=int)

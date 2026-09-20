@@ -22,7 +22,7 @@ def preprocess_data(file_path):
         data['Date'] = pd.to_datetime(data['Date'])
 
     # classification and regression targets
-    data['Next_Day_Change'] = (data['GOLD'].diff() > 0).astype(int)
+    data['Next_Day_Change'] = (data['GOLD'].shift(-1) > data['GOLD']).astype(int)
     data['Next_Day_Gold_Price'] = data['GOLD'].shift(-1)
 
     # feature engineering
