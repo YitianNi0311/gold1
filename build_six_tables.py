@@ -1,4 +1,4 @@
-"""Build six new tables only after all 42/43/44 aligned runs are complete."""
+"""Build the six tables once all runs for seeds 42/43/44 are done and aligned."""
 
 import argparse
 import json

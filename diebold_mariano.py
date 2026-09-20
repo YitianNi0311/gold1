@@ -1,10 +1,8 @@
-"""Paired Diebold-Mariano comparisons for full BFNE versus zero FCNN.
+"""Paired Diebold-Mariano tests, full BFNE-Net vs the version without FCNNs.
 
-The test uses one forecast per historical date and fold. A positive loss
-difference means that the full model has the larger loss. Historical label
-and meta-evaluation leakage is retained; the resulting p-values must not
-be interpreted as evidence of leakage-free forecasting skill.
-"""
+One forecast per fold and date. A positive loss difference means the full model has
+the larger loss. The old label / meta-model leakage is still in, so the p-values only
+describe the saved error series, not leakage-free forecasting skill."""
 
 from pathlib import Path
 
@@ -21,10 +19,10 @@ LOSSES = ("squared_price_error", "absolute_price_error",
 
 
 def dm_test(loss_full, loss_zero, *, lag=10):
-    """Two-sided modified DM statistic with Bartlett HAC and h=1 correction.
+    """Two-sided modified DM statistic (Bartlett HAC variance, h=1 small-sample correction).
 
-    Losses are paired in chronological order. The pre-specified lag is in
-    trading observations; it is not selected from the observed p-value.
+    Losses are paired in time order. The lag is fixed in advance in trading days,
+    not picked after looking at the p-value.
     """
     full = np.asarray(loss_full, dtype=float).reshape(-1)
     zero = np.asarray(loss_zero, dtype=float).reshape(-1)
@@ -41,7 +39,7 @@ def dm_test(loss_full, loss_zero, *, lag=10):
         long_run_variance += 2 * (1 - offset / (lag + 1)) * covariance
     if not np.isfinite(long_run_variance) or long_run_variance <= 0:
         raise ValueError("Loss differential has no positive estimated long-run variance")
-    # Harvey-Leybourne-Newbold small-sample correction for horizon h=1.
+    # HLN small-sample correction, h=1
     correction = np.sqrt((n - 1) / n)
     statistic = float(correction * difference.mean() /
                       np.sqrt(long_run_variance / n))
@@ -81,7 +79,7 @@ def _read_predictions(path):
 
 
 def paired_losses(full_path, zero_path, reference_path):
-    """Reject any fold/date/row/target mismatch before computing losses."""
+    """Raise on any fold/date/row/target mismatch before computing losses."""
     full = _read_predictions(full_path)
     zero = _read_predictions(zero_path)
     if not full.loc[:, KEYS].equals(zero.loc[:, KEYS]):
@@ -121,7 +119,7 @@ def summarize(loss_frame, *, lag=10):
 
 
 def average_seed_losses(seed_frames):
-    """Average paired losses by date before testing; never average p-values."""
+    """Average the three seeds' losses per date, then test. p-values are never averaged."""
     if set(seed_frames) != {42, 43, 44}:
         raise ValueError("The aggregate requires complete seeds 42, 43 and 44")
     reference = seed_frames[42].loc[:, KEYS]
@@ -139,7 +137,7 @@ def average_seed_losses(seed_frames):
 
 
 def save_dm_tables(seed_prediction_pairs, reference_path, output_dir, *, lag=10):
-    """Save seed-42 and three-seed DM tables plus auditable daily losses."""
+    """Save the seed-42 and three-seed DM tables plus the daily losses for checking."""
     output_dir = Path(output_dir)
     if output_dir.exists():
         raise FileExistsError(output_dir)

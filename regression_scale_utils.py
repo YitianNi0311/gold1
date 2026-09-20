@@ -1,8 +1,7 @@
-"""Regression evaluation helpers for Table 8.
+"""Small helpers for regression evaluation (Table 8).
 
-All public metrics returned here are evaluated on the original gold-price
-scale. ``mape_percent`` is a percentage: 2.5 means 2.5%.
-"""
+Every metric returned here is computed on the original gold-price scale; mape_percent
+is a percentage (2.5 means 2.5%)."""
 
 import numpy as np
 from sklearn.metrics import mean_absolute_percentage_error, mean_squared_error
@@ -21,11 +20,10 @@ def regression_metrics_original_price(
     *,
     prediction_scaler=None,
 ):
-    """Return original-price predictions, RMSE (USD/oz), and MAPE (%).
+    """Return original-price predictions, RMSE (USD/oz) and MAPE (%).
 
-    ``prediction_scaler`` must be the scaler fitted on the corresponding
-    training fold when ``predictions`` are standardized. Leave it as ``None``
-    when predictions are already in original price units.
+    If the predictions are standardized, pass the prediction_scaler fit on the matching
+    training fold. Leave it as None when they are already in price units.
     """
     true_price = _one_dimensional_finite(y_true_price, "y_true_price")
     prediction_values = _one_dimensional_finite(predictions, "predictions")

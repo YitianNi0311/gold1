@@ -1,4 +1,4 @@
-"""Numerical and alignment tests for paired forecast comparisons."""
+"""Numeric and alignment tests for the paired forecast comparison."""
 
 import tempfile
 import unittest

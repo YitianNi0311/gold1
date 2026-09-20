@@ -1,9 +1,9 @@
-"""Real-data preflight for reconstructed baselines; does not train models."""
+"""Preflight on the real data for the rebuilt baselines. No training."""
 
 import unittest
 
 from historical_alignment import aligned_data
-from reconstructed_without_fe import RAW_FEATURES, audit_features
+from BFNE_Net_without_FE import RAW_FEATURES, audit_features
 
 
 class ReconstructedAlignmentTests(unittest.TestCase):

@@ -12,5 +12,5 @@ done
 for m in full no_fcnn without_fe; do
   $PY run_seeded_ensembles.py --rounds 1 --model $m --seed $S --output seeded_runs/seed$S/$m >> seeded_runs/${m}_seed${S}_console.log 2>&1 || echo "FAILED $m $S" >> seeded_runs/failures.txt
 done
-$PY reconstructed_cnn_lstm.py --seed $S --task both --output seeded_runs/seed$S/cnn_lstm >> seeded_runs/cnn_lstm_seed${S}_console.log 2>&1 || echo "FAILED cnn_lstm $S" >> seeded_runs/failures.txt
+$PY CNN_LSTM.py --seed $S --task both --output seeded_runs/seed$S/cnn_lstm >> seeded_runs/cnn_lstm_seed${S}_console.log 2>&1 || echo "FAILED cnn_lstm $S" >> seeded_runs/failures.txt
 echo "SEED $S DONE $(date)" >> seeded_runs/progress.txt

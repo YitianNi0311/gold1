@@ -39,7 +39,7 @@ WEIGHT_DECAY = 1e-5
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent
 DATA_PATH = PROJECT_DIR / "GOLD_cleaned.xlsx"
-ORIGINAL_SCRIPT = PROJECT_DIR / "CNN-LSTM.py"
+ORIGINAL_SCRIPT = PROJECT_DIR / "CNN_LSTM_base.py"
 OUTPUT_DIR = SCRIPT_DIR
 PICTURE_DIR = OUTPUT_DIR / "picture"
 
@@ -76,7 +76,7 @@ class ArrayDataset(Dataset):
 
 
 class CNNLSTM(nn.Module):
-    """Original CNN/LSTM body with the missing two-class output layer restored."""
+    """Original CNN/LSTM body with the missing two-class output layer added back."""
 
     def __init__(self, hidden_size: int = 128, num_classes: int = 2):
         super().__init__()
@@ -343,8 +343,8 @@ def main():
         {"item": "Random seed", "original": "Not explicitly set", "adjusted": SEED, "reason": "Keep the project seed fixed and make runs reproducible"},
         {"item": "Classification output", "original": "128 LSTM hidden values", "adjusted": "Linear(128, 2)", "reason": "Correct missing binary classification head"},
         {"item": "Optimizer", "original": "Adam", "adjusted": selected["optimizer"], "reason": "Selected on inner chronological validation"},
-        {"item": "Learning rate", "original": 1e-5, "adjusted": selected["lr"], "reason": "Selected on inner chronological validation; 归一.py reference is 5e-4"},
-        {"item": "Weight decay", "original": 0.0, "adjusted": WEIGHT_DECAY if selected["optimizer"] == "AdamW" else 0.0, "reason": "Matches 归一.py when AdamW is selected"},
+        {"item": "Learning rate", "original": 1e-5, "adjusted": selected["lr"], "reason": "Selected on inner chronological validation; BFNE_Net.py reference is 5e-4"},
+        {"item": "Weight decay", "original": 0.0, "adjusted": WEIGHT_DECAY if selected["optimizer"] == "AdamW" else 0.0, "reason": "Matches BFNE_Net.py when AdamW is selected"},
         {"item": "LR scheduler", "original": "None", "adjusted": "CosineAnnealingLR(T_max=100)", "reason": "Stable decay after selecting the initial learning rate"},
         {"item": "Gradient clipping", "original": "None", "adjusted": 1.0, "reason": "Limit recurrent-network gradient spikes"},
         {"item": "Epochs", "original": 100, "adjusted": MAX_EPOCHS, "reason": "Unchanged"},

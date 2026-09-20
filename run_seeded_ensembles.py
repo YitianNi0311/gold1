@@ -1,8 +1,7 @@
-"""Auditable seeded reruns of the historical BFNE stacking protocols.
+"""Seeded reruns of the BFNE stacking runs, checkpointed per fold.
 
-The historical labels and meta-evaluation leakage are deliberately retained.
-Each completed fold is checkpointed; a resumed run uses the same per-fold seed.
-"""
+The old labels and meta-model evaluation leakage are kept on purpose. A resumed run
+uses the same per-fold seed."""
 
 import argparse
 import hashlib
@@ -18,9 +17,9 @@ import torch
 from sklearn.ensemble import GradientBoostingClassifier, GradientBoostingRegressor
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
 
-import no_fcnn_model as zero
+import BFNE_Net_without_FCNNs as zero
 from historical_alignment import DATA, ROOT, aligned_data
-from reconstructed_without_fe import audit_features, load_full_model_source, train_fold as full_train_fold
+from BFNE_Net_without_FE import audit_features, load_full_model_source, train_fold as full_train_fold
 from regression_scale_utils import regression_metrics_original_price
 
 
@@ -33,7 +32,7 @@ def seed_everything(seed):
 
 
 def seeded_optimizers(module, seed):
-    """Keep original Optuna objectives/search spaces and 50-trial budgets."""
+    """Same Optuna objectives and search space, 50 trials per search."""
     def make_optimizer(task):
         objective = getattr(module, f"objective_lgbm_{task}")
         direction = "minimize" if task == "reg" else "maximize"
@@ -126,7 +125,7 @@ def run(model, seed, output_dir, evaluation_rounds=5):
     manifest_file = output_dir / "run_manifest.json"
     manifest = {
         "status": "running", "model": model, "seed": seed,
-        "source": "no_fcnn_model.py" if model == "no_fcnn" else "归一.py",
+        "source": "BFNE_Net_without_FCNNs.py" if model == "no_fcnn" else "BFNE_Net.py",
         "paper_reconstruction": model == "without_fe",
         "n_cleaned_rows": 4419, "n_features": x.shape[1],
         "deleted_engineered_features": deleted,
@@ -202,8 +201,8 @@ def run(model, seed, output_dir, evaluation_rounds=5):
                     json.dumps({"mean": fd["scaler_y"].mean_.tolist(),
                                 "scale": fd["scaler_y"].scale_.tolist()}), encoding="utf-8")
                 print(f"RMSE USD/oz={rmse:.4f}; MAPE %={mape:.4f}", flush=True)
-            # The historical scripts refit the unchanged OOF meta models
-            # between evaluation rounds. This is deterministic for each seed.
+            # the original scripts refit the OOF meta models between evaluation rounds,
+            # which is deterministic for a given seed.
             if round_number < rounds:
                 meta_reg, meta_clf = meta_models(
                     reg_parts, reg_labels, clf_parts, clf_labels, seed)

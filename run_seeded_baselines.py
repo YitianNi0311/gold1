@@ -1,4 +1,4 @@
-"""Rerun independent trees and the reconstructed persistence baseline on aligned dates."""
+"""Rerun the standalone tree models and the random walk on the aligned dates."""
 
 import argparse
 import hashlib

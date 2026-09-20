@@ -1,4 +1,4 @@
-"""Train and evaluate the local three-tree ensemble using the historical protocol."""
+"""Train and evaluate the three-tree ensemble with the old protocol."""
 
 import argparse
 import json
@@ -12,7 +12,7 @@ import pandas as pd
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 from sklearn.model_selection import TimeSeriesSplit
 
-from no_fcnn_model import preprocess_data, prepare_fold, train_fold, fit_meta_models
+from BFNE_Net_without_FCNNs import preprocess_data, prepare_fold, train_fold, fit_meta_models
 from regression_scale_utils import regression_metrics_original_price
 
 
@@ -45,13 +45,13 @@ def classification_metrics(true, predicted, probabilities):
 
 
 def run(data_path, output_dir):
-    """Run one OOF stage and the five historical evaluation rounds."""
+    """One OOF stage plus five evaluation rounds."""
     data_path, output_dir = Path(data_path).resolve(), Path(output_dir).resolve()
     X, y_class, y_reg = preprocess_data(data_path)
     raw = pd.read_excel(data_path)
     dates = pd.to_datetime(raw.loc[X.index, "Date"])
     folds = list(TimeSeriesSplit(n_splits=5).split(X))
-    # A new directory prevents an accidental overwrite of an earlier run.
+    # fresh directory so an earlier run is never overwritten
     output_dir.mkdir(parents=True, exist_ok=False)
     random.seed(42)
     np.random.seed(42)

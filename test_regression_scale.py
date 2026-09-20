@@ -51,13 +51,13 @@ class RegressionScaleTests(unittest.TestCase):
             self.assertAlmostEqual(mape_scaled_path, mape_direct)
 
     def test_static_final_paths(self):
-        bfne = (ROOT / "归一.py").read_text(encoding="utf-8")
+        bfne = (ROOT / "BFNE_Net.py").read_text(encoding="utf-8")
         self.assertEqual(bfne.count("regression_metrics_original_price("), 5)
         self.assertNotIn(
             "mean_absolute_percentage_error_custom(y_test_reg_scaled, fold_meta_preds_reg_scaled)",
             bfne,
         )
-        for name in ("RF.py", "XGBoost.py", "gold lightgbm.py"):
+        for name in ("Random_Forest.py", "XGBoost.py", "LightGBM.py"):
             text = (ROOT / name).read_text(encoding="utf-8")
             self.assertIn("regression_metrics_original_price(", text)
             self.assertIn("RMSE (USD/oz)", text)
@@ -74,8 +74,8 @@ class RegressionScaleTests(unittest.TestCase):
             runner,
         )
         self.assertIn('"mape_percent": mape', runner)
-        self.assertIn("from no_fcnn_model import", runner)
-        zero = ast.parse((ROOT / "no_fcnn_model.py").read_text(encoding="utf-8"))
+        self.assertIn("from BFNE_Net_without_FCNNs import", runner)
+        zero = ast.parse((ROOT / "BFNE_Net_without_FCNNs.py").read_text(encoding="utf-8"))
         for name, expected in (
             ("build_regressors", ["LGBMRegressor", "XGBRegressor", "RandomForestRegressor"]),
             ("build_classifiers", ["LGBMClassifier", "XGBClassifier", "RandomForestClassifier"]),
@@ -85,7 +85,7 @@ class RegressionScaleTests(unittest.TestCase):
             self.assertEqual([n.func.id for n in returned.value.elts], expected)
 
     def test_every_final_block_restores_once_with_its_fold_scaler(self):
-        tree = ast.parse((ROOT / "归一.py").read_text(encoding="utf-8"))
+        tree = ast.parse((ROOT / "BFNE_Net.py").read_text(encoding="utf-8"))
         assignments = [n for n in ast.walk(tree) if isinstance(n, ast.Assign)
                        and isinstance(n.value, ast.Call) and isinstance(n.value.func, ast.Name)
                        and n.value.func.id == "regression_metrics_original_price"]
@@ -107,9 +107,9 @@ class RegressionScaleTests(unittest.TestCase):
 
     def test_tree_raw_targets_and_console_csv_units(self):
         for filename, function, prefix in (
-            ("RF.py", "train_random_forest", "RF"),
+            ("Random_Forest.py", "train_random_forest", "RF"),
             ("XGBoost.py", "train_xgboost", "XGBoost"),
-            ("gold lightgbm.py", "train_lightgbm", "LightGBM"),
+            ("LightGBM.py", "train_lightgbm", "LightGBM"),
         ):
             with self.subTest(filename=filename):
                 fitted = []

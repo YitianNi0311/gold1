@@ -9,23 +9,23 @@ from sklearn.metrics import (
 )
 from regression_scale_utils import regression_metrics_original_price
 import warnings
-import ta  # 技术指标库
+import ta  # technical indicators lib
 from pathlib import Path
 
-warnings.filterwarnings('ignore')  # Suppress warnings
+warnings.filterwarnings('ignore')  # silence warnings
 
-# 数据预处理函数
+# preprocessing
 def preprocess_data(file_path):
     data = pd.read_excel(file_path)
 
     if not np.issubdtype(data['Date'].dtype, np.datetime64):
         data['Date'] = pd.to_datetime(data['Date'])
 
-    # 创建分类目标和回归目标
+    # classification and regression targets
     data['Next_Day_Change'] = (data['GOLD'].diff() > 0).astype(int)
     data['Next_Day_Gold_Price'] = data['GOLD'].shift(-1)
 
-    # 特征工程
+    # feature engineering
     for lag in range(1, 31):
         data[f'GOLD_lag{lag}'] = data['GOLD'].shift(lag)
 
@@ -41,13 +41,13 @@ def preprocess_data(file_path):
     data['Bollinger_High'] = bollinger.bollinger_hband()
     data['Bollinger_Low'] = bollinger.bollinger_lband()
 
-    # 滚动特征
+    # rolling features
     data['GOLD_roll_mean_5'] = data['GOLD'].rolling(window=10).mean()
     data['GOLD_roll_std_5'] = data['GOLD'].rolling(window=10).std()
     data['GOLD_roll_min_5'] = data['GOLD'].rolling(window=10).min()
     data['GOLD_roll_max_5'] = data['GOLD'].rolling(window=10).max()
 
-    # 自定义特征
+    # custom features
     data['Gold_Oil_Ratio'] = data['GOLD'] / data['CrudeOil_SpotPrice_BrentUK']
     data['USD_CNY_to_JPY'] = data['SpotRate_USD_CNY'] / data['SpotRate_Tokyo_9AM_USD_JPY']
     data['China_US_CPI_Ratio'] = data['China_CPI_YoY_CurrentMonth'] / data['US_CPI_YoY_NSA']
@@ -62,12 +62,12 @@ def preprocess_data(file_path):
     data['Gold_SP500_Ratio'] = data['GOLD'] / data['US_SP500_Index']
     data['US_Japan_Interest_Rate_Diff'] = data['US_DowJones_IndustrialAverage'] - data['SpotRate_Tokyo_9AM_USD_JPY']
 
-    # 时间相关特征
+    # time features
     data['Month'] = data['Date'].dt.month
     data['Quarter'] = data['Date'].dt.quarter
     data['Day_of_Week'] = data['Date'].dt.dayofweek
 
-    # 向前移动特征
+    # shift features by one day
     today_features = [
         'Gold_Oil_Ratio', 'USD_CNY_to_JPY', 'China_US_CPI_Ratio',
         'Gold_Rate_of_Change', 'Oil_Rate_of_Change', 'Gold_Trend_7_days',
@@ -76,10 +76,10 @@ def preprocess_data(file_path):
     ]
     data[today_features] = data[today_features].shift(1)
 
-    # 清理数据，删除 NaN 和 Inf 值
+    # drop NaN / inf rows
     data = data.replace([np.inf, -np.inf], np.nan).dropna()
 
-    # 使用原始特征集合
+    # original feature set
     features = [
         'GOLD_MA_3_days', 'GOLD_lag1', 'GOLD_MA_5_days',
         'GOLD_lag2', 'GOLD_MA_10_days', 'GOLD_lag3', 'GOLD_lag4', 'GOLD_lag5', 'GOLD_lag6', 'GOLD_lag7', 'GOLD_lag8',
@@ -105,7 +105,7 @@ def preprocess_data(file_path):
 
 
 def train_lightgbm(X_train, y_cls_train, y_reg_train, X_test, y_cls_test, y_reg_test):
-    # 分类模型
+    # classifier
     lgb_cls = lgb.LGBMClassifier(
         n_estimators=500,
         learning_rate=0.01,
@@ -120,7 +120,7 @@ def train_lightgbm(X_train, y_cls_train, y_reg_train, X_test, y_cls_test, y_reg_
     y_cls_pred = (lgb_cls.predict(X_test) > 0.5).astype(int)
     y_cls_prob = lgb_cls.predict_proba(X_test)[:, 1]
 
-    # 回归模型
+    # regressor
     lgb_reg = lgb.LGBMRegressor(
         n_estimators=500,
         learning_rate=0.01,
@@ -134,15 +134,15 @@ def train_lightgbm(X_train, y_cls_train, y_reg_train, X_test, y_cls_test, y_reg_
 
     y_reg_pred = lgb_reg.predict(X_test)
 
-    # 分类指标
+    # classification metrics
     acc = accuracy_score(y_cls_test, y_cls_pred)
     prec = precision_score(y_cls_test, y_cls_pred)
     rec = recall_score(y_cls_test, y_cls_pred)
     f1 = f1_score(y_cls_test, y_cls_pred)
     auc = roc_auc_score(y_cls_test, y_cls_prob)
 
-    # 回归指标
-    # y was never standardized: evaluate the original-price prediction directly.
+    # regression metrics
+    # y was never standardized, so score the price directly
     _, rmse, mape = regression_metrics_original_price(y_reg_test, y_reg_pred)
 
     return acc, prec, rec, f1, auc, rmse, mape, y_reg_pred

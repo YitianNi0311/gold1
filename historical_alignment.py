@@ -1,8 +1,7 @@
-"""Read-only alignment gate for reconstructed seed-42 baselines.
+"""Check that the rebuilt baselines line up with the seed-42 historical test rows (read-only).
 
-The historical labels are retained verbatim. Passing this gate confirms
-matching test rows; it does not remove historical label or stacking leakage.
-"""
+The old labels are kept as they were. Passing only means the test rows match; it does
+not remove the label or stacking leakage."""
 
 import hashlib
 import json
@@ -12,7 +11,7 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import TimeSeriesSplit
 
-from no_fcnn_model import preprocess_data
+from BFNE_Net_without_FCNNs import preprocess_data
 
 
 ROOT = Path(__file__).resolve().parent
@@ -22,7 +21,7 @@ REFERENCE_MANIFEST = ROOT / "seed42_reference_targets_manifest.json"
 
 
 def aligned_data(data_path=DATA, reference_path=REFERENCE):
-    """Return the original 4,419 rows only after checking every test target."""
+    """Return the 4,419 original rows, but only after every test target checks out."""
     data_path, reference_path = Path(data_path), Path(reference_path)
     x, y_class, y_price = preprocess_data(data_path)
     if len(x) != 4419 or x.shape[1] != 48:

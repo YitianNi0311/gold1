@@ -1,8 +1,7 @@
-"""New persistence baseline, not a recovered author implementation.
+"""Random walk baseline (written fresh, not the authors' code).
 
-Predict GOLD_(t+1) with GOLD_t on the historical 4,419-row test schedule.
-This script writes a separate run directory and never changes Table 8/9.
-"""
+Forecasts GOLD_(t+1) with GOLD_t on the same 4,419-row test schedule as the
+historical runs."""
 
 import argparse
 import json

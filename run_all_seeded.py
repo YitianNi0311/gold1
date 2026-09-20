@@ -1,9 +1,7 @@
-"""Resume the 24 aligned runs, validate six tables, then publish results.
+"""Finish the 24 runs, check them, build the six tables and publish.
 
-An existing full seed-42 process can be allowed to finish with
-``--wait-for-full42``. The script stops at the first failed run and never
-publishes a partial table.
-"""
+If the full seed-42 process is already running, pass --wait-for-full42 to wait for it.
+It stops at the first failed run and never publishes an incomplete table."""
 
 import argparse
 import json
@@ -45,7 +43,7 @@ def run_one(model, seed):
     if model == "cnn_lstm":
         if folder.exists():
             raise RuntimeError(f"CNN-LSTM has no fold resume; inspect existing folder: {folder}")
-        cmd = [sys.executable, "reconstructed_cnn_lstm.py", "--task", "both"]
+        cmd = [sys.executable, "CNN_LSTM.py", "--task", "both"]
     elif model in ("full", "no_fcnn", "without_fe"):
         cmd = [sys.executable, "run_seeded_ensembles.py", "--model", model]
     else:

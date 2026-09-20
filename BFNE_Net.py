@@ -21,30 +21,30 @@ from xgboost import XGBClassifier, XGBRegressor
 from torch.utils.data import Dataset, DataLoader
 import logging
 import matplotlib.pyplot as plt
-import ta  # 确保已安装 ta 库: pip install ta
+import ta
 import warnings
 from sklearn.utils.class_weight import compute_class_weight
 from torch.cuda.amp import autocast, GradScaler
 import optuna
 
-warnings.filterwarnings('ignore')  # Suppress warnings
+warnings.filterwarnings('ignore')  # silence warnings
 
-# Set random seeds for reproducibility
+# fix seeds
 torch.manual_seed(42)
 np.random.seed(42)
 
-# Configure logging
+# logging
 logging.basicConfig(
     filename='training_log.txt',
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-# Define the Dataset class for Regression
+# regression dataset
 class FinancialRegressionDataset(Dataset):
     def __init__(self, features, targets):
         self.features = features
-        self.targets = targets  # Already scaled in main
+        self.targets = targets  # already scaled in main
 
     def __len__(self):
         return len(self.features)
@@ -55,11 +55,11 @@ class FinancialRegressionDataset(Dataset):
             torch.tensor(self.targets[idx], dtype=torch.float32)
         )
 
-# Define the Dataset class for Classification
+# classification dataset
 class FinancialClassificationDataset(Dataset):
     def __init__(self, features, labels):
         self.features = features
-        self.labels = labels.values.astype(np.int64)  # Replace np.long with np.int64
+        self.labels = labels.values.astype(np.int64)  # np.long is gone in newer numpy, use int64
 
     def __len__(self):
         return len(self.features)
@@ -70,7 +70,7 @@ class FinancialClassificationDataset(Dataset):
             torch.tensor(self.labels[idx], dtype=torch.long)
         )
 
-# Define Early Stopping
+# early stopping
 class EarlyStopping:
     def __init__(self, patience=15, delta=0):
         self.patience = patience
@@ -90,7 +90,7 @@ class EarlyStopping:
             self.best_loss = val_loss
             self.counter = 0
 
-# Define Focal Loss for Classification (Optional)
+# focal loss for classification
 class FocalLoss(nn.Module):
     def __init__(self, alpha=None, gamma=2, reduction='mean'):
         super(FocalLoss, self).__init__()
@@ -100,7 +100,7 @@ class FocalLoss(nn.Module):
         self.ce_loss = nn.CrossEntropyLoss(reduction='none')
 
     def forward(self, inputs, targets):
-        ce_loss = self.ce_loss(inputs, targets)  # Raw logits
+        ce_loss = self.ce_loss(inputs, targets)
         pt = torch.exp(-ce_loss)
         if self.alpha is not None:
             alpha = self.alpha[targets].unsqueeze(1)
@@ -114,7 +114,7 @@ class FocalLoss(nn.Module):
         else:
             return focal_loss
 
-# Define the Fully Connected Neural Network Model for Regression
+# FCNN for regression
 class FCNNRegressor(nn.Module):
     def __init__(self, input_dim, hidden_dims, output_dim=1, dropout=0.5):
         super(FCNNRegressor, self).__init__()
@@ -130,9 +130,9 @@ class FCNNRegressor(nn.Module):
         self.network = nn.Sequential(*layers)
 
     def forward(self, x):
-        return self.network(x)  # Raw continuous output
+        return self.network(x)
 
-# Define the Fully Connected Neural Network Model for Classification
+# FCNN for classification
 class FCNNClassifier(nn.Module):
     def __init__(self, input_dim, hidden_dims, output_dim=2, dropout=0.5):
         super(FCNNClassifier, self).__init__()
@@ -148,90 +148,90 @@ class FCNNClassifier(nn.Module):
         self.network = nn.Sequential(*layers)
 
     def forward(self, x):
-        return self.network(x)  # Raw logits
+        return self.network(x)
 
-# Define RMS (Root Mean Squared Error)
+# RMSE
 def root_mean_squared_error(y_true, y_pred):
     return np.sqrt(mean_squared_error(y_true, y_pred))
 
-# Define MAPE (Mean Absolute Percentage Error)
+# MAPE
 def mean_absolute_percentage_error_custom(y_true, y_pred):
-    """Return MAPE in percent; 2.5 means 2.5%."""
+    """MAPE as a percentage (2.5 means 2.5%)."""
     return mean_absolute_percentage_error(y_true, y_pred) * 100.0
 
-# Define data preprocessing function
+# preprocessing
 def preprocess_data(file_path):
-    # Load data
+    # load data
     data = pd.read_excel(file_path)
 
-    # Ensure 'Date' column is datetime
+    # make Date a datetime
     if not np.issubdtype(data['Date'].dtype, np.datetime64):
         data['Date'] = pd.to_datetime(data['Date'])
 
-    # Create Classification Target: 1 if next day's GOLD price increases, else 0
+    # class label: 1 if price goes up
     data['Next_Day_Change'] = (data['GOLD'].diff() > 0).astype(int)
 
-    # Create Regression Target: next day's GOLD price
+    # regression target: next day's gold price
     data['Next_Day_Price'] = data['GOLD'].shift(-1)
 
-    # Feature engineering
-    # Lag features
+    # feature engineering
+    # lags
     for lag in range(1, 31):
         data[f'GOLD_lag{lag}'] = data['GOLD'].shift(lag)
 
-    # Moving averages
+    # moving averages
     data['GOLD_MA_3_days'] = data['GOLD'].rolling(window=3).mean()
     data['GOLD_MA_5_days'] = data['GOLD'].rolling(window=5).mean()
     data['GOLD_MA_10_days'] = data['GOLD'].rolling(window=10).mean()
 
-    # Technical indicators
+    # technical indicators
     data['RSI'] = ta.momentum.RSIIndicator(close=data['GOLD'], window=14).rsi()
     macd = ta.trend.MACD(close=data['GOLD'])
     data['MACD'] = macd.macd_diff()
 
-    # Bollinger Bands
+    # bollinger bands
     bollinger = ta.volatility.BollingerBands(close=data['GOLD'], window=20)
     data['Bollinger_High'] = bollinger.bollinger_hband()
     data['Bollinger_Low'] = bollinger.bollinger_lband()
 
-    # Rolling statistics
+    # rolling stats
     rolling_window = 10
     data['GOLD_roll_mean_5'] = data['GOLD'].rolling(window=rolling_window).mean()
     data['GOLD_roll_std_5'] = data['GOLD'].rolling(window=rolling_window).std()
     data['GOLD_roll_min_5'] = data['GOLD'].rolling(window=rolling_window).min()
     data['GOLD_roll_max_5'] = data['GOLD'].rolling(window=rolling_window).max()
 
-    # Custom features
+    # custom features
     data['Gold_Oil_Ratio'] = data['GOLD'] / data['CrudeOil_SpotPrice_BrentUK']
     data['USD_CNY_to_JPY'] = data['SpotRate_USD_CNY'] / data['SpotRate_Tokyo_9AM_USD_JPY']
     data['China_US_CPI_Ratio'] = data['China_CPI_YoY_CurrentMonth'] / data['US_CPI_YoY_NSA']
 
-    # Rate of change features
+    # rate of change
     data['Gold_Rate_of_Change'] = data['GOLD'].pct_change(periods=5)
     data['Oil_Rate_of_Change'] = data['CrudeOil_SpotPrice_BrentUK'].pct_change(periods=5)
 
-    # Trend feature
+    # trend
     data['Gold_Trend_7_days'] = data['GOLD'].rolling(window=7).apply(
         lambda x: np.polyfit(range(len(x)), x, 1)[0], raw=True
     )
 
-    # Inflation-adjusted gold price
+    # inflation-adjusted gold price
     data['Gold_Inflation_Adjusted'] = data['GOLD'] / data['US_CPI_YoY_NSA']
 
-    # Volatility features
+    # volatility
     data['Gold_Volatility_10_days'] = data['GOLD'].rolling(window=10).std()
     data['Oil_Volatility_10_days'] = data['CrudeOil_SpotPrice_BrentUK'].rolling(window=10).std()
 
-    # Interaction features
+    # interactions
     data['Gold_SP500_Ratio'] = data['GOLD'] / data['US_SP500_Index']
     data['US_Japan_Interest_Rate_Diff'] = data['US_DowJones_IndustrialAverage'] - data['SpotRate_Tokyo_9AM_USD_JPY']
 
-    # Time-related features
+    # time features
     data['Month'] = data['Date'].dt.month
     data['Quarter'] = data['Date'].dt.quarter
     data['Day_of_Week'] = data['Date'].dt.dayofweek
 
-    # Shift today features by 1 day
+    # shift same-day features back one day
     today_features = [
         'Gold_Oil_Ratio', 'USD_CNY_to_JPY', 'China_US_CPI_Ratio',
         'Gold_Rate_of_Change', 'Oil_Rate_of_Change', 'Gold_Trend_7_days',
@@ -240,10 +240,10 @@ def preprocess_data(file_path):
     ]
     data[today_features] = data[today_features].shift(1)
 
-    # Clean data: remove NaN or inf
+    # drop NaN / inf
     data = data.replace([np.inf, -np.inf], np.nan).dropna()
 
-    # Define feature list
+    # feature list
     features = [
         'GOLD_MA_3_days', 'GOLD_lag1', 'GOLD_MA_5_days',
         'GOLD_lag2', 'GOLD_MA_10_days', 'GOLD_lag3', 'GOLD_lag4', 'GOLD_lag5',
@@ -261,19 +261,19 @@ def preprocess_data(file_path):
         'Interbank_OpenRate_USD_INR', 'SpotRate_Tokyo_9AM_USD_JPY'
     ]
 
-    # Check if all features are present
+    # make sure every feature exists
     missing_features = [feature for feature in features if feature not in data.columns]
     if missing_features:
         raise ValueError(f"The following required features are missing from the data: {missing_features}")
 
-    # Split features and targets
+    # split X and y
     X = data[features]
     y_class = data['Next_Day_Change']
     y_reg = data['Next_Day_Price']
 
     return X, y_class, y_reg
 
-# Feature scaling function for features
+# scale features
 def preprocess_and_scale(X_train, X_test, scaler_type='StandardScaler'):
     if scaler_type == 'StandardScaler':
         scaler = StandardScaler()
@@ -286,7 +286,7 @@ def preprocess_and_scale(X_train, X_test, scaler_type='StandardScaler'):
     X_test_scaled = scaler.transform(X_test)
     return X_train_scaled, X_test_scaled, scaler
 
-# Feature scaling function for regression target
+# scale the regression target
 def preprocess_and_scale_reg_target(y_train, y_test, scaler_type='StandardScaler'):
     if scaler_type == 'StandardScaler':
         scaler_y = StandardScaler()
@@ -299,7 +299,7 @@ def preprocess_and_scale_reg_target(y_train, y_test, scaler_type='StandardScaler
     y_test_scaled = scaler_y.transform(y_test.values.reshape(-1, 1)).flatten()
     return y_train_scaled, y_test_scaled, scaler_y
 
-# LightGBM objective for Regression
+# optuna objective, LightGBM regression
 def objective_lgbm_reg(trial, X_train, y_train):
     param = {
         'n_estimators': trial.suggest_int('n_estimators', 100, 500),
@@ -314,9 +314,9 @@ def objective_lgbm_reg(trial, X_train, y_train):
 
     lgbm = LGBMRegressor(**param)
     score = cross_val_score(lgbm, X_train, y_train, cv=3, scoring='neg_mean_squared_error').mean()
-    return -score  # We want to minimize MSE
+    return -score
 
-# Optimize LightGBM for Regression
+# tune LightGBM (regression)
 def optimize_lgbm_reg(X_train, y_train):
     study = optuna.create_study(direction='minimize')
     study.optimize(lambda trial: objective_lgbm_reg(trial, X_train, y_train), n_trials=50)
@@ -328,7 +328,7 @@ def optimize_lgbm_reg(X_train, y_train):
 
     return study.best_params
 
-# LightGBM objective for Classification
+# optuna objective, LightGBM classification
 def objective_lgbm_clf(trial, X_train, y_train):
     param = {
         'n_estimators': trial.suggest_int('n_estimators', 100, 500),
@@ -343,9 +343,9 @@ def objective_lgbm_clf(trial, X_train, y_train):
 
     lgbm = LGBMClassifier(**param)
     score = cross_val_score(lgbm, X_train, y_train, cv=3, scoring='roc_auc').mean()
-    return score  # We want to maximize ROC AUC
+    return score
 
-# Optimize LightGBM for Classification
+# tune LightGBM (classification)
 def optimize_lgbm_clf(X_train, y_train):
     study = optuna.create_study(direction='maximize')
     study.optimize(lambda trial: objective_lgbm_clf(trial, X_train, y_train), n_trials=50)
@@ -357,20 +357,18 @@ def optimize_lgbm_clf(X_train, y_train):
 
     return study.best_params
 
-# Train base models for Regression
+# base models, regression
 def train_base_models_reg(X_train, y_train, device):
-    # Initialize FCNN Regressors
     hidden_dims1 = [256, 128, 64]
     fcnn1 = FCNNRegressor(input_dim=X_train.shape[1], hidden_dims=hidden_dims1).to(device)
 
     hidden_dims2 = [512, 256, 128, 64]
     fcnn2 = FCNNRegressor(input_dim=X_train.shape[1], hidden_dims=hidden_dims2).to(device)
 
-    # Optimize and initialize LightGBM Regressor
+    # tune LightGBM first
     best_params_lgbm = optimize_lgbm_reg(X_train, y_train)
     lgbm_reg = LGBMRegressor(**best_params_lgbm, random_state=42, n_jobs=-1)
 
-    # Initialize XGBoost Regressor
     xgb_reg = XGBRegressor(
         n_estimators=300,
         learning_rate=0.03,
@@ -382,7 +380,6 @@ def train_base_models_reg(X_train, y_train, device):
         n_jobs=-1
     )
 
-    # Initialize Random Forest Regressor
     rf_reg = RandomForestRegressor(
         n_estimators=200,
         max_depth=10,
@@ -390,22 +387,17 @@ def train_base_models_reg(X_train, y_train, device):
         n_jobs=-1
     )
 
-    # Initialize optimizers with AdamW
     optimizer1 = optim.AdamW(fcnn1.parameters(), lr=0.005, weight_decay=1e-5)
     optimizer2 = optim.AdamW(fcnn2.parameters(), lr=0.005, weight_decay=1e-5)
 
-    # Initialize learning rate schedulers with Cosine Annealing
     scheduler1 = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer1, T_max=50)
     scheduler2 = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer2, T_max=50)
 
-    # Initialize Early Stopping
     early_stopping1 = EarlyStopping(patience=12)
     early_stopping2 = EarlyStopping(patience=12)
 
-    # Initialize MSE Loss
     mse_loss = nn.MSELoss()
 
-    # Group all models and related components
     models = (fcnn1, fcnn2, lgbm_reg, xgb_reg, rf_reg)
     optimizers = (optimizer1, optimizer2)
     schedulers = (scheduler1, scheduler2)
@@ -413,20 +405,18 @@ def train_base_models_reg(X_train, y_train, device):
 
     return models, optimizers, schedulers, early_stoppings, mse_loss
 
-# Train base models for Classification
+# base models, classification
 def train_base_models_clf(X_train, y_train, device):
-    # Initialize FCNN Classifiers
     hidden_dims1 = [256, 128, 64]
     fcnn1 = FCNNClassifier(input_dim=X_train.shape[1], hidden_dims=hidden_dims1).to(device)
 
     hidden_dims2 = [512, 256, 128, 64]
     fcnn2 = FCNNClassifier(input_dim=X_train.shape[1], hidden_dims=hidden_dims2).to(device)
 
-    # Optimize and initialize LightGBM Classifier
+    # tune LightGBM first
     best_params_lgbm = optimize_lgbm_clf(X_train, y_train)
     lgbm_clf = LGBMClassifier(**best_params_lgbm, random_state=42, n_jobs=-1)
 
-    # Initialize XGBoost Classifier
     xgb_clf = XGBClassifier(
         n_estimators=300,
         learning_rate=0.03,
@@ -440,7 +430,6 @@ def train_base_models_clf(X_train, y_train, device):
         n_jobs=-1
     )
 
-    # Initialize Random Forest Classifier
     rf_clf = RandomForestClassifier(
         n_estimators=200,
         max_depth=10,
@@ -448,24 +437,20 @@ def train_base_models_clf(X_train, y_train, device):
         n_jobs=-1
     )
 
-    # Initialize optimizers with AdamW
     optimizer1 = optim.AdamW(fcnn1.parameters(), lr=0.0005, weight_decay=1e-5)
     optimizer2 = optim.AdamW(fcnn2.parameters(), lr=0.0005, weight_decay=1e-5)
 
-    # Initialize learning rate schedulers with Cosine Annealing
     scheduler1 = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer1, T_max=50)
     scheduler2 = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer2, T_max=50)
 
-    # Initialize Early Stopping
     early_stopping1 = EarlyStopping(patience=15)
     early_stopping2 = EarlyStopping(patience=15)
 
-    # Compute class weights and initialize Focal Loss
+    # class weights + focal loss
     class_weights = compute_class_weight('balanced', classes=np.unique(y_train), y=y_train)
     class_weights = torch.tensor(class_weights, dtype=torch.float32).to(device)
     focal_loss = FocalLoss(alpha=class_weights, gamma=2)
 
-    # Group all models and related components
     models = (fcnn1, fcnn2, lgbm_clf, xgb_clf, rf_clf)
     optimizers = (optimizer1, optimizer2)
     schedulers = (scheduler1, scheduler2)
@@ -473,7 +458,7 @@ def train_base_models_clf(X_train, y_train, device):
 
     return models, optimizers, schedulers, early_stoppings, focal_loss
 
-# Train FCNN Regressors
+# train regression FCNNs
 def train_fcnn_reg(models, optimizers, schedulers, early_stoppings, mse_loss, train_loader, device, num_epochs=300):
     fcnn1, fcnn2, _, _, _ = models
     optimizer1, optimizer2 = optimizers
@@ -492,7 +477,6 @@ def train_fcnn_reg(models, optimizers, schedulers, early_stoppings, mse_loss, tr
         for X_batch, y_batch in train_loader:
             X_batch, y_batch = X_batch.to(device), y_batch.to(device)
 
-            # Train FCNN1
             optimizer1.zero_grad()
             with autocast():
                 outputs1 = fcnn1(X_batch).squeeze()
@@ -502,7 +486,6 @@ def train_fcnn_reg(models, optimizers, schedulers, early_stoppings, mse_loss, tr
             scaler.update()
             running_loss1 += loss1.item()
 
-            # Train FCNN2
             optimizer2.zero_grad()
             with autocast():
                 outputs2 = fcnn2(X_batch).squeeze()
@@ -512,21 +495,18 @@ def train_fcnn_reg(models, optimizers, schedulers, early_stoppings, mse_loss, tr
             scaler.update()
             running_loss2 += loss2.item()
 
-        # Calculate average losses
         avg_loss1 = running_loss1 / len(train_loader)
         avg_loss2 = running_loss2 / len(train_loader)
         loss_history1.append(avg_loss1)
         loss_history2.append(avg_loss2)
 
-        # Print and log losses
         print(f"Epoch {epoch + 1} - FCNN1 Loss: {avg_loss1:.4f}, FCNN2 Loss: {avg_loss2:.4f}")
         logging.info(f"Epoch {epoch + 1} - FCNN1 Loss: {avg_loss1:.4f}, FCNN2 Loss: {avg_loss2:.4f}")
 
-        # Step the schedulers
         scheduler1.step()
         scheduler2.step()
 
-        # Check early stopping
+        # early stopping
         early_stopping1(avg_loss1)
         early_stopping2(avg_loss2)
         if early_stopping1.early_stop or early_stopping2.early_stop:
@@ -536,7 +516,7 @@ def train_fcnn_reg(models, optimizers, schedulers, early_stoppings, mse_loss, tr
 
     return loss_history1, loss_history2
 
-# Train FCNN Classifiers
+# train classification FCNNs
 def train_fcnn_clf(models, optimizers, schedulers, early_stoppings, focal_loss, train_loader, device, num_epochs=300):
     fcnn1, fcnn2, _, _, _ = models
     optimizer1, optimizer2 = optimizers
@@ -555,7 +535,6 @@ def train_fcnn_clf(models, optimizers, schedulers, early_stoppings, focal_loss, 
         for X_batch, y_batch in train_loader:
             X_batch, y_batch = X_batch.to(device), y_batch.to(device)
 
-            # Train FCNN1
             optimizer1.zero_grad()
             with autocast():
                 outputs1 = fcnn1(X_batch)
@@ -565,7 +544,6 @@ def train_fcnn_clf(models, optimizers, schedulers, early_stoppings, focal_loss, 
             scaler.update()
             running_loss1 += loss1.item()
 
-            # Train FCNN2
             optimizer2.zero_grad()
             with autocast():
                 outputs2 = fcnn2(X_batch)
@@ -575,21 +553,18 @@ def train_fcnn_clf(models, optimizers, schedulers, early_stoppings, focal_loss, 
             scaler.update()
             running_loss2 += loss2.item()
 
-        # Calculate average losses
         avg_loss1 = running_loss1 / len(train_loader)
         avg_loss2 = running_loss2 / len(train_loader)
         loss_history1.append(avg_loss1)
         loss_history2.append(avg_loss2)
 
-        # Print and log losses
         print(f"Epoch {epoch + 1} - FCNN1 Loss: {avg_loss1:.4f}, FCNN2 Loss: {avg_loss2:.4f}")
         logging.info(f"Epoch {epoch + 1} - FCNN1 Loss: {avg_loss1:.4f}, FCNN2 Loss: {avg_loss2:.4f}")
 
-        # Step the schedulers
         scheduler1.step()
         scheduler2.step()
 
-        # Check early stopping
+        # early stopping
         early_stopping1(avg_loss1)
         early_stopping2(avg_loss2)
         if early_stopping1.early_stop or early_stopping2.early_stop:
@@ -599,7 +574,7 @@ def train_fcnn_clf(models, optimizers, schedulers, early_stoppings, focal_loss, 
 
     return loss_history1, loss_history2
 
-# Plot loss curves
+# loss curves
 def plot_loss_curve(loss_history1, loss_history2, fold, task='regression', eval=False):
     plt.figure(figsize=(10, 6))
     if task in ['regression', 'classification']:
@@ -616,10 +591,10 @@ def plot_loss_curve(loss_history1, loss_history2, fold, task='regression', eval=
     filename = f'training_loss_curve_fold_{fold + 1}_{task}.png'
     if eval:
         filename = f'training_loss_curve_eval_fold_{fold + 1}_{task}.png'
-    plt.savefig(filename)  # Save the plot as a file
-    plt.close()  # Close the plot to avoid display issues
+    plt.savefig(filename)
+    plt.close()
 
-# Generate meta-features for Regression
+# meta-features, regression
 def generate_meta_features_reg(fcnn1, fcnn2, lgbm_reg, xgb_reg, rf_reg, test_loader, X_test_scaled, device):
     fcnn1.eval()
     fcnn2.eval()
@@ -632,16 +607,13 @@ def generate_meta_features_reg(fcnn1, fcnn2, lgbm_reg, xgb_reg, rf_reg, test_loa
             preds1.extend(output1)
             preds2.extend(output2)
 
-    # LightGBM predictions
     lgbm_preds = lgbm_reg.predict(X_test_scaled)
 
-    # XGBoost predictions
     xgb_preds = xgb_reg.predict(X_test_scaled)
 
-    # Random Forest predictions
     rf_preds = rf_reg.predict(X_test_scaled)
 
-    # Stack all predictions as meta-features
+    # stack into meta-features
     fold_meta_features = np.column_stack([
         preds1,
         preds2,
@@ -651,7 +623,7 @@ def generate_meta_features_reg(fcnn1, fcnn2, lgbm_reg, xgb_reg, rf_reg, test_loa
     ])
     return fold_meta_features
 
-# Generate meta-features for Classification
+# meta-features, classification
 def generate_meta_features_clf(fcnn1, fcnn2, lgbm_clf, xgb_clf, rf_clf, test_loader, X_test_scaled, device):
     fcnn1.eval()
     fcnn2.eval()
@@ -661,19 +633,16 @@ def generate_meta_features_clf(fcnn1, fcnn2, lgbm_clf, xgb_clf, rf_clf, test_loa
             X_batch = X_batch.to(device)
             output1 = fcnn1(X_batch)
             output2 = fcnn2(X_batch)
-            preds1.extend(torch.softmax(output1, dim=1).cpu().numpy())  # Convert to probabilities
+            preds1.extend(torch.softmax(output1, dim=1).cpu().numpy())
             preds2.extend(torch.softmax(output2, dim=1).cpu().numpy())
 
-    # LightGBM predictions
     lgbm_probs = lgbm_clf.predict_proba(X_test_scaled)
 
-    # XGBoost predictions
     xgb_probs = xgb_clf.predict_proba(X_test_scaled)
 
-    # Random Forest predictions
     rf_probs = rf_clf.predict_proba(X_test_scaled)
 
-    # Stack all predictions as meta-features
+    # stack into meta-features
     fold_meta_features = np.hstack([
         np.array(preds1),
         np.array(preds2),
@@ -684,7 +653,7 @@ def generate_meta_features_clf(fcnn1, fcnn2, lgbm_clf, xgb_clf, rf_clf, test_loa
     return fold_meta_features
 
 def main():
-    # File path (modify as needed)
+    # data path, change when moving machines
     file_path = os.path.join(os.path.dirname(__file__), "GOLD_cleaned.xlsx")
     try:
         X, y_class, y_reg = preprocess_data(file_path)
@@ -693,7 +662,7 @@ def main():
         logging.error(f"Error in preprocessing data: {e}")
         return
 
-    # Check target distributions
+    # label balance
     print("Classification Target Distribution:")
     print(y_class.value_counts())
     logging.info(f"Classification Target Distribution:\n{y_class.value_counts()}")
@@ -702,25 +671,23 @@ def main():
     print(y_reg.describe())
     logging.info(f"Regression Target Statistics:\n{y_reg.describe()}")
 
-    # Initialize device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"\nUsing device: {device}")
     logging.info(f"Using device: {device}")
 
-    # Initialize TimeSeriesSplit
     tscv = TimeSeriesSplit(n_splits=5)
 
-    # Lists to store meta-features and labels for first cross-validation
+    # first CV: collect meta-features and labels
     meta_train_features_reg_cv1 = []
     meta_train_labels_reg_cv1 = []
     meta_train_features_clf_cv1 = []
     meta_train_labels_clf_cv1 = []
 
-    # Lists to store evaluation metrics for second cross-validation
+    # second CV: collect eval metrics
     rmses, mapes = [], []
     accuracies, precisions, recalls, f1_scores, aucs = [], [], [], [], []
 
-    # First Cross-Validation: Generate Meta-Features for Regression and Classification
+    # first CV: build the meta-features
     print("\nGenerating meta-features and training base models for Regression and Classification...")
     logging.info("Generating meta-features and training base models started.")
 
@@ -728,42 +695,35 @@ def main():
         print(f"\nFold {fold + 1} - Training base models")
         logging.info(f"Fold {fold + 1} - Training base models started")
 
-        # Split data for Regression
         X_train_reg, X_test_reg = X.iloc[train_index], X.iloc[test_index]
         y_train_reg_fold, y_test_reg_fold = y_reg.iloc[train_index], y_reg.iloc[test_index]
 
-        # Split data for Classification
         X_train_clf, X_test_clf = X.iloc[train_index], X.iloc[test_index]
         y_train_clf_fold, y_test_clf_fold = y_class.iloc[train_index], y_class.iloc[test_index]
 
-        # Scale features for Regression
         X_train_reg_scaled, X_test_reg_scaled, scaler_X_reg = preprocess_and_scale(
             X_train_reg, X_test_reg, scaler_type='StandardScaler'
         )
 
-        # Scale target for Regression
         y_train_reg_scaled, y_test_reg_scaled, scaler_y_reg = preprocess_and_scale_reg_target(
             y_train_reg_fold, y_test_reg_fold, scaler_type='StandardScaler'
         )
 
-        # Scale features for Classification
         X_train_clf_scaled, X_test_clf_scaled, scaler_X_clf = preprocess_and_scale(
             X_train_clf, X_test_clf, scaler_type='StandardScaler'
         )
 
-        # Create Datasets and DataLoaders for Regression
         train_dataset_reg = FinancialRegressionDataset(X_train_reg_scaled, y_train_reg_scaled)
         test_dataset_reg = FinancialRegressionDataset(X_test_reg_scaled, y_test_reg_scaled)
         train_loader_reg = DataLoader(train_dataset_reg, batch_size=32, shuffle=True)
         test_loader_reg = DataLoader(test_dataset_reg, batch_size=32, shuffle=False)
 
-        # Create Datasets and DataLoaders for Classification
         train_dataset_clf = FinancialClassificationDataset(X_train_clf_scaled, y_train_clf_fold)
         test_dataset_clf = FinancialClassificationDataset(X_test_clf_scaled, y_test_clf_fold)
         train_loader_clf = DataLoader(train_dataset_clf, batch_size=32, shuffle=True)
         test_loader_clf = DataLoader(test_dataset_clf, batch_size=32, shuffle=False)
 
-        # Train base models for Regression
+        # base models, regression
         models_reg, optimizers_reg, schedulers_reg, early_stoppings_reg, mse_loss = train_base_models_reg(
             X_train_reg_scaled, y_train_reg_scaled, device
         )
@@ -777,21 +737,17 @@ def main():
             device=device
         )
 
-        # Plot loss curves for Regression
         plot_loss_curve(loss_history1_reg, loss_history2_reg, fold, task='regression')
 
-        # Get Regression Models
         fcnn1_reg, fcnn2_reg, lgbm_reg, xgb_reg, rf_reg = models_reg
 
-        # Train LightGBM Regressor
         try:
             lgbm_reg.fit(X_train_reg_scaled, y_train_reg_scaled)
         except Exception as e:
             print(f"Error during LGBMRegressor training: {e}")
             logging.error(f"Error during LGBMRegressor training: {e}")
-            continue  # 使用 continue 跳过当前折叠并继续下一个
+            continue  # skip this fold if it errors
 
-        # Train XGBoost Regressor
         try:
             xgb_reg.fit(X_train_reg_scaled, y_train_reg_scaled)
         except Exception as e:
@@ -799,7 +755,6 @@ def main():
             logging.error(f"Error during XGBoost Regressor training: {e}")
             continue
 
-        # Train Random Forest Regressor
         try:
             rf_reg.fit(X_train_reg_scaled, y_train_reg_scaled)
         except Exception as e:
@@ -807,7 +762,7 @@ def main():
             logging.error(f"Error during RandomForestRegressor training: {e}")
             continue
 
-        # Generate meta-features for Regression
+        # meta-features, regression
         fold_meta_features_reg = generate_meta_features_reg(
             fcnn1=fcnn1_reg,
             fcnn2=fcnn2_reg,
@@ -819,11 +774,10 @@ def main():
             device=device
         )
 
-        # Append to meta-feature lists for Regression
         meta_train_features_reg_cv1.append(fold_meta_features_reg)
-        meta_train_labels_reg_cv1.extend(y_test_reg_scaled)  # 使用缩放后的目标进行元模型训练
+        meta_train_labels_reg_cv1.extend(y_test_reg_scaled)  # meta model trains on the scaled target
 
-        # Train base models for Classification
+        # base models, classification
         models_clf, optimizers_clf, schedulers_clf, early_stoppings_clf, focal_loss = train_base_models_clf(
             X_train_clf_scaled, y_train_clf_fold, device
         )
@@ -837,13 +791,10 @@ def main():
             device=device
         )
 
-        # Plot loss curves for Classification
         plot_loss_curve(loss_history1_clf, loss_history2_clf, fold, task='classification')
 
-        # Get Classification Models
         fcnn1_clf, fcnn2_clf, lgbm_clf, xgb_clf, rf_clf = models_clf
 
-        # Train LightGBM Classifier
         try:
             lgbm_clf.fit(X_train_clf_scaled, y_train_clf_fold)
         except Exception as e:
@@ -851,7 +802,6 @@ def main():
             logging.error(f"Error during LGBMClassifier training: {e}")
             continue
 
-        # Train XGBoost Classifier
         try:
             xgb_clf.fit(X_train_clf_scaled, y_train_clf_fold)
         except Exception as e:
@@ -859,7 +809,6 @@ def main():
             logging.error(f"Error during XGBoost Classifier training: {e}")
             continue
 
-        # Train Random Forest Classifier
         try:
             rf_clf.fit(X_train_clf_scaled, y_train_clf_fold)
         except Exception as e:
@@ -867,7 +816,7 @@ def main():
             logging.error(f"Error during RandomForestClassifier training: {e}")
             continue
 
-        # Generate meta-features for Classification
+        # meta-features, classification
         fold_meta_features_clf = generate_meta_features_clf(
             fcnn1=fcnn1_clf,
             fcnn2=fcnn2_clf,
@@ -879,19 +828,18 @@ def main():
             device=device
         )
 
-        # Append to meta-feature lists for Classification
         meta_train_features_clf_cv1.append(fold_meta_features_clf)
         meta_train_labels_clf_cv1.extend(y_test_clf_fold.values)
 
-    # Combine all meta-features and labels for Regression
+    # combine regression meta-features
     meta_train_features_reg_cv1 = np.vstack(meta_train_features_reg_cv1)
     meta_train_labels_reg_cv1 = np.array(meta_train_labels_reg_cv1)
 
-    # Combine all meta-features and labels for Classification
+    # combine classification meta-features
     meta_train_features_clf_cv1 = np.vstack(meta_train_features_clf_cv1)
     meta_train_labels_clf_cv1 = np.array(meta_train_labels_clf_cv1)
 
-    # Train Meta-Model for Regression
+    # regression meta model
     print("\nTraining Meta-Model for Regression...")
     logging.info("Training Meta-Model for Regression started.")
     meta_model_reg = GradientBoostingRegressor(
@@ -902,7 +850,7 @@ def main():
     )
     meta_model_reg.fit(meta_train_features_reg_cv1, meta_train_labels_reg_cv1)
 
-    # Train Meta-Model for Classification
+    # classification meta model
     print("\nTraining Meta-Model for Classification...")
     logging.info("Training Meta-Model for Classification started.")
     meta_model_clf = GradientBoostingClassifier(
@@ -913,15 +861,13 @@ def main():
     )
     meta_model_clf.fit(meta_train_features_clf_cv1, meta_train_labels_clf_cv1)
 
-    # Second Cross-Validation: Evaluate Ensemble Models
+    # second CV: evaluate the ensemble
     print("\nEvaluating Ensemble Models for Regression and Classification...")
     logging.info("Evaluating Ensemble Models started.")
 
-    # Initialize lists for second cross-validation metrics
     eval_rmses, eval_mapes = [], []
     eval_accuracies, eval_precisions, eval_recalls, eval_f1_scores, eval_aucs = [], [], [], [], []
 
-    # Reset meta-feature lists for second cross-validation
     meta_train_features_reg_cv2 = []
     meta_train_labels_reg_cv2 = []
     meta_train_features_clf_cv2 = []
@@ -931,15 +877,12 @@ def main():
         print(f"\nFold {fold + 1} - Evaluating Ensemble Models")
         logging.info(f"Fold {fold + 1} - Evaluating Ensemble Models started")
 
-        # Split data for Regression
         X_train_reg, X_test_reg = X.iloc[train_index], X.iloc[test_index]
         y_train_reg_fold, y_test_reg_fold = y_reg.iloc[train_index], y_reg.iloc[test_index]
 
-        # Split data for Classification
         X_train_clf, X_test_clf = X.iloc[train_index], X.iloc[test_index]
         y_train_clf_fold, y_test_clf_fold = y_class.iloc[train_index], y_class.iloc[test_index]
 
-        # Scale features and targets
         X_train_reg_scaled, X_test_reg_scaled, scaler_X_reg_eval = preprocess_and_scale(
             X_train_reg, X_test_reg, scaler_type='StandardScaler'
         )
@@ -950,19 +893,17 @@ def main():
             X_train_clf, X_test_clf, scaler_type='StandardScaler'
         )
 
-        # Create Datasets and DataLoaders for Regression
         train_dataset_reg = FinancialRegressionDataset(X_train_reg_scaled, y_train_reg_scaled)
         test_dataset_reg = FinancialRegressionDataset(X_test_reg_scaled, y_test_reg_scaled)
         train_loader_reg = DataLoader(train_dataset_reg, batch_size=32, shuffle=True)
         test_loader_reg = DataLoader(test_dataset_reg, batch_size=32, shuffle=False)
 
-        # Create Datasets and DataLoaders for Classification
         train_dataset_clf = FinancialClassificationDataset(X_train_clf_scaled, y_train_clf_fold)
         test_dataset_clf = FinancialClassificationDataset(X_test_clf_scaled, y_test_clf_fold)
         train_loader_clf = DataLoader(train_dataset_clf, batch_size=32, shuffle=True)
         test_loader_clf = DataLoader(test_dataset_clf, batch_size=32, shuffle=False)
 
-        # Train base models for Regression
+        # base models, regression
         models_reg, optimizers_reg, schedulers_reg, early_stoppings_reg, mse_loss = train_base_models_reg(
             X_train_reg_scaled, y_train_reg_scaled, device
         )
@@ -976,13 +917,10 @@ def main():
             device=device
         )
 
-        # Plot loss curves for Regression
         plot_loss_curve(loss_history1_reg, loss_history2_reg, fold, task='regression', eval=True)
 
-        # Get Regression Models
         fcnn1_reg, fcnn2_reg, lgbm_reg, xgb_reg, rf_reg = models_reg
 
-        # Train LightGBM Regressor
         try:
             lgbm_reg.fit(X_train_reg_scaled, y_train_reg_scaled)
         except Exception as e:
@@ -990,7 +928,6 @@ def main():
             logging.error(f"Error during LGBMRegressor training: {e}")
             continue
 
-        # Train XGBoost Regressor
         try:
             xgb_reg.fit(X_train_reg_scaled, y_train_reg_scaled)
         except Exception as e:
@@ -998,7 +935,6 @@ def main():
             logging.error(f"Error during XGBoost Regressor training: {e}")
             continue
 
-        # Train Random Forest Regressor
         try:
             rf_reg.fit(X_train_reg_scaled, y_train_reg_scaled)
         except Exception as e:
@@ -1006,7 +942,7 @@ def main():
             logging.error(f"Error during RandomForestRegressor training: {e}")
             continue
 
-        # Generate meta-features for Regression
+        # meta-features, regression
         fold_meta_features_reg = generate_meta_features_reg(
             fcnn1=fcnn1_reg,
             fcnn2=fcnn2_reg,
@@ -1018,25 +954,22 @@ def main():
             device=device
         )
 
-        # Predict with Meta-Model for Regression
         fold_meta_preds_reg_scaled = meta_model_reg.predict(fold_meta_features_reg)
-        # The meta-model predicts the fold-standardized target. Use this fold's
-        # training-fitted scaler exactly once, then evaluate against raw prices.
+        # the meta model predicts this fold's standardized target;
+        # undo it once with the scaler fit on this fold's training set, then compare to raw prices.
         fold_meta_preds_reg, rmse, mape = regression_metrics_original_price(
             y_test_reg_fold,
             fold_meta_preds_reg_scaled,
             prediction_scaler=scaler_y_reg_eval,
         )
 
-        # Store Regression metrics
         rmses.append(rmse)
         mapes.append(mape)
 
-        # Print and log Regression metrics
         print(f"Fold {fold + 1} - Regression: RMSE (USD/oz)={rmse:.4f}, MAPE (%)={mape:.4f}")
         logging.info(f"Fold {fold + 1} - Regression: RMSE (USD/oz)={rmse:.4f}, MAPE (%)={mape:.4f}")
 
-        # Train base models for Classification
+        # base models, classification
         models_clf, optimizers_clf, schedulers_clf, early_stoppings_clf, focal_loss = train_base_models_clf(
             X_train_clf_scaled, y_train_clf_fold, device
         )
@@ -1050,13 +983,10 @@ def main():
             device=device
         )
 
-        # Plot loss curves for Classification
         plot_loss_curve(loss_history1_clf, loss_history2_clf, fold, task='classification', eval=True)
 
-        # Get Classification Models
         fcnn1_clf, fcnn2_clf, lgbm_clf, xgb_clf, rf_clf = models_clf
 
-        # Train LightGBM Classifier
         try:
             lgbm_clf.fit(X_train_clf_scaled, y_train_clf_fold)
         except Exception as e:
@@ -1064,7 +994,6 @@ def main():
             logging.error(f"Error during LGBMClassifier training: {e}")
             continue
 
-        # Train XGBoost Classifier
         try:
             xgb_clf.fit(X_train_clf_scaled, y_train_clf_fold)
         except Exception as e:
@@ -1072,7 +1001,6 @@ def main():
             logging.error(f"Error during XGBoost Classifier training: {e}")
             continue
 
-        # Train Random Forest Classifier
         try:
             rf_clf.fit(X_train_clf_scaled, y_train_clf_fold)
         except Exception as e:
@@ -1080,7 +1008,7 @@ def main():
             logging.error(f"Error during RandomForestClassifier training: {e}")
             continue
 
-        # Generate meta-features for Classification
+        # meta-features, classification
         fold_meta_features_clf = generate_meta_features_clf(
             fcnn1=fcnn1_clf,
             fcnn2=fcnn2_clf,
@@ -1092,12 +1020,11 @@ def main():
             device=device
         )
 
-        # Append to meta-feature lists for Classification
         meta_train_features_clf_cv2.append(fold_meta_features_clf)
         meta_train_labels_clf_cv2.extend(y_test_clf_fold.values)
 
-        # Keep the historical protocol: classification is scored in the first
-        # evaluation round only; regression continues for all five rounds.
+        # same as before: classification is only scored in the first evaluation round,
+        # regression is scored in all five.
         fold_meta_preds_clf = meta_model_clf.predict(fold_meta_features_clf)
         fold_meta_probs_clf = meta_model_clf.predict_proba(fold_meta_features_clf)[:, 1]
         accuracy = accuracy_score(y_test_clf_fold, fold_meta_preds_clf)
@@ -1115,15 +1042,15 @@ def main():
         logging.info(f"Fold {fold + 1} - Classification: ACC={accuracy:.4f}, PREC={precision:.4f}, "
                      f"REC={recall:.4f}, F1={f1:.4f}, AUC={auc:.4f}")
 
-    # Combine all meta-features and labels for Regression (First Cross-Validation)
+    # combine regression meta-features (first CV)
     meta_train_features_reg_cv1 = np.vstack(meta_train_features_reg_cv1)
     meta_train_labels_reg_cv1 = np.array(meta_train_labels_reg_cv1)
 
-    # Combine all meta-features and labels for Classification (First Cross-Validation)
+    # combine classification meta-features (first CV)
     meta_train_features_clf_cv1 = np.vstack(meta_train_features_clf_cv1)
     meta_train_labels_clf_cv1 = np.array(meta_train_labels_clf_cv1)
 
-    # Train Meta-Model for Regression
+    # regression meta model
     print("\nTraining Meta-Model for Regression...")
     logging.info("Training Meta-Model for Regression started.")
     meta_model_reg = GradientBoostingRegressor(
@@ -1134,7 +1061,7 @@ def main():
     )
     meta_model_reg.fit(meta_train_features_reg_cv1, meta_train_labels_reg_cv1)
 
-    # Train Meta-Model for Classification
+    # classification meta model
     print("\nTraining Meta-Model for Classification...")
     logging.info("Training Meta-Model for Classification started.")
     meta_model_clf = GradientBoostingClassifier(
@@ -1145,7 +1072,7 @@ def main():
     )
     meta_model_clf.fit(meta_train_features_clf_cv1, meta_train_labels_clf_cv1)
 
-    # Second Cross-Validation: Evaluate Ensemble Models
+    # second CV: evaluate the ensemble
     print("\nEvaluating Ensemble Models for Regression and Classification...")
     logging.info("Evaluating Ensemble Models started.")
 
@@ -1153,15 +1080,12 @@ def main():
         print(f"\nFold {fold + 1} - Evaluating Ensemble Models")
         logging.info(f"Fold {fold + 1} - Evaluating Ensemble Models started")
 
-        # Split data for Regression
         X_train_reg, X_test_reg = X.iloc[train_index], X.iloc[test_index]
         y_train_reg_fold, y_test_reg_fold = y_reg.iloc[train_index], y_reg.iloc[test_index]
 
-        # Split data for Classification
         X_train_clf, X_test_clf = X.iloc[train_index], X.iloc[test_index]
         y_train_clf_fold, y_test_clf_fold = y_class.iloc[train_index], y_class.iloc[test_index]
 
-        # Scale features and targets
         X_train_reg_scaled, X_test_reg_scaled, scaler_X_reg_eval = preprocess_and_scale(
             X_train_reg, X_test_reg, scaler_type='StandardScaler'
         )
@@ -1172,19 +1096,17 @@ def main():
             X_train_clf, X_test_clf, scaler_type='StandardScaler'
         )
 
-        # Create Datasets and DataLoaders for Regression
         train_dataset_reg = FinancialRegressionDataset(X_train_reg_scaled, y_train_reg_scaled)
         test_dataset_reg = FinancialRegressionDataset(X_test_reg_scaled, y_test_reg_scaled)
         train_loader_reg = DataLoader(train_dataset_reg, batch_size=32, shuffle=True)
         test_loader_reg = DataLoader(test_dataset_reg, batch_size=32, shuffle=False)
 
-        # Create Datasets and DataLoaders for Classification
         train_dataset_clf = FinancialClassificationDataset(X_train_clf_scaled, y_train_clf_fold)
         test_dataset_clf = FinancialClassificationDataset(X_test_clf_scaled, y_test_clf_fold)
         train_loader_clf = DataLoader(train_dataset_clf, batch_size=32, shuffle=True)
         test_loader_clf = DataLoader(test_dataset_clf, batch_size=32, shuffle=False)
 
-        # Train base models for Regression
+        # base models, regression
         models_reg, optimizers_reg, schedulers_reg, early_stoppings_reg, mse_loss = train_base_models_reg(
             X_train_reg_scaled, y_train_reg_scaled, device
         )
@@ -1198,13 +1120,10 @@ def main():
             device=device
         )
 
-        # Plot loss curves for Regression
         plot_loss_curve(loss_history1_reg, loss_history2_reg, fold, task='regression', eval=True)
 
-        # Get Regression Models
         fcnn1_reg, fcnn2_reg, lgbm_reg, xgb_reg, rf_reg = models_reg
 
-        # Train LightGBM Regressor
         try:
             lgbm_reg.fit(X_train_reg_scaled, y_train_reg_scaled)
         except Exception as e:
@@ -1212,7 +1131,6 @@ def main():
             logging.error(f"Error during LGBMRegressor training: {e}")
             continue
 
-        # Train XGBoost Regressor
         try:
             xgb_reg.fit(X_train_reg_scaled, y_train_reg_scaled)
         except Exception as e:
@@ -1220,7 +1138,6 @@ def main():
             logging.error(f"Error during XGBoost Regressor training: {e}")
             continue
 
-        # Train Random Forest Regressor
         try:
             rf_reg.fit(X_train_reg_scaled, y_train_reg_scaled)
         except Exception as e:
@@ -1228,7 +1145,7 @@ def main():
             logging.error(f"Error during RandomForestRegressor training: {e}")
             continue
 
-        # Generate meta-features for Regression
+        # meta-features, regression
         fold_meta_features_reg = generate_meta_features_reg(
             fcnn1=fcnn1_reg,
             fcnn2=fcnn2_reg,
@@ -1240,24 +1157,21 @@ def main():
             device=device
         )
 
-        # Predict with Meta-Model for Regression
         fold_meta_preds_reg_scaled = meta_model_reg.predict(fold_meta_features_reg)
-        # Restore this fold's standardized predictions to original prices.
+        # back to raw prices for this fold
         fold_meta_preds_reg, rmse, mape = regression_metrics_original_price(
             y_test_reg_fold,
             fold_meta_preds_reg_scaled,
             prediction_scaler=scaler_y_reg_eval,
         )
 
-        # Store Regression metrics
         rmses.append(rmse)
         mapes.append(mape)
 
-        # Print and log Regression metrics
         print(f"Fold {fold + 1} - Regression: RMSE (USD/oz)={rmse:.4f}, MAPE (%)={mape:.4f}")
         logging.info(f"Fold {fold + 1} - Regression: RMSE (USD/oz)={rmse:.4f}, MAPE (%)={mape:.4f}")
 
-        # Train base models for Classification
+        # base models, classification
         models_clf, optimizers_clf, schedulers_clf, early_stoppings_clf, focal_loss = train_base_models_clf(
             X_train_clf_scaled, y_train_clf_fold, device
         )
@@ -1271,13 +1185,10 @@ def main():
             device=device
         )
 
-        # Plot loss curves for Classification
         plot_loss_curve(loss_history1_clf, loss_history2_clf, fold, task='classification', eval=True)
 
-        # Get Classification Models
         fcnn1_clf, fcnn2_clf, lgbm_clf, xgb_clf, rf_clf = models_clf
 
-        # Train LightGBM Classifier
         try:
             lgbm_clf.fit(X_train_clf_scaled, y_train_clf_fold)
         except Exception as e:
@@ -1285,7 +1196,6 @@ def main():
             logging.error(f"Error during LGBMClassifier training: {e}")
             continue
 
-        # Train XGBoost Classifier
         try:
             xgb_clf.fit(X_train_clf_scaled, y_train_clf_fold)
         except Exception as e:
@@ -1293,7 +1203,6 @@ def main():
             logging.error(f"Error during XGBoost Classifier training: {e}")
             continue
 
-        # Train Random Forest Classifier
         try:
             rf_clf.fit(X_train_clf_scaled, y_train_clf_fold)
         except Exception as e:
@@ -1301,7 +1210,7 @@ def main():
             logging.error(f"Error during RandomForestClassifier training: {e}")
             continue
 
-        # Generate meta-features for Classification
+        # meta-features, classification
         fold_meta_features_clf = generate_meta_features_clf(
             fcnn1=fcnn1_clf,
             fcnn2=fcnn2_clf,
@@ -1313,19 +1222,18 @@ def main():
             device=device
         )
 
-        # Append to meta-feature lists for Classification
         meta_train_features_clf_cv2.append(fold_meta_features_clf)
         meta_train_labels_clf_cv2.extend(y_test_clf_fold.values)
 
-    # Combine all meta-features and labels for Regression (First Cross-Validation)
+    # combine regression meta-features (first CV)
     meta_train_features_reg_cv1 = np.vstack(meta_train_features_reg_cv1)
     meta_train_labels_reg_cv1 = np.array(meta_train_labels_reg_cv1)
 
-    # Combine all meta-features and labels for Classification (First Cross-Validation)
+    # combine classification meta-features (first CV)
     meta_train_features_clf_cv1 = np.vstack(meta_train_features_clf_cv1)
     meta_train_labels_clf_cv1 = np.array(meta_train_labels_clf_cv1)
 
-    # Train Meta-Model for Regression
+    # regression meta model
     print("\nTraining Meta-Model for Regression...")
     logging.info("Training Meta-Model for Regression started.")
     meta_model_reg = GradientBoostingRegressor(
@@ -1336,7 +1244,7 @@ def main():
     )
     meta_model_reg.fit(meta_train_features_reg_cv1, meta_train_labels_reg_cv1)
 
-    # Train Meta-Model for Classification
+    # classification meta model
     print("\nTraining Meta-Model for Classification...")
     logging.info("Training Meta-Model for Classification started.")
     meta_model_clf = GradientBoostingClassifier(
@@ -1347,7 +1255,7 @@ def main():
     )
     meta_model_clf.fit(meta_train_features_clf_cv1, meta_train_labels_clf_cv1)
 
-    # Second Cross-Validation: Evaluate Ensemble Models
+    # second CV: evaluate the ensemble
     print("\nEvaluating Ensemble Models for Regression and Classification...")
     logging.info("Evaluating Ensemble Models started.")
 
@@ -1355,15 +1263,12 @@ def main():
         print(f"\nFold {fold + 1} - Evaluating Ensemble Models")
         logging.info(f"Fold {fold + 1} - Evaluating Ensemble Models started")
 
-        # Split data for Regression
         X_train_reg, X_test_reg = X.iloc[train_index], X.iloc[test_index]
         y_train_reg_fold, y_test_reg_fold = y_reg.iloc[train_index], y_reg.iloc[test_index]
 
-        # Split data for Classification
         X_train_clf, X_test_clf = X.iloc[train_index], X.iloc[test_index]
         y_train_clf_fold, y_test_clf_fold = y_class.iloc[train_index], y_class.iloc[test_index]
 
-        # Scale features and targets
         X_train_reg_scaled, X_test_reg_scaled, scaler_X_reg_eval = preprocess_and_scale(
             X_train_reg, X_test_reg, scaler_type='StandardScaler'
         )
@@ -1374,19 +1279,17 @@ def main():
             X_train_clf, X_test_clf, scaler_type='StandardScaler'
         )
 
-        # Create Datasets and DataLoaders for Regression
         train_dataset_reg = FinancialRegressionDataset(X_train_reg_scaled, y_train_reg_scaled)
         test_dataset_reg = FinancialRegressionDataset(X_test_reg_scaled, y_test_reg_scaled)
         train_loader_reg = DataLoader(train_dataset_reg, batch_size=32, shuffle=True)
         test_loader_reg = DataLoader(test_dataset_reg, batch_size=32, shuffle=False)
 
-        # Create Datasets and DataLoaders for Classification
         train_dataset_clf = FinancialClassificationDataset(X_train_clf_scaled, y_train_clf_fold)
         test_dataset_clf = FinancialClassificationDataset(X_test_clf_scaled, y_test_clf_fold)
         train_loader_clf = DataLoader(train_dataset_clf, batch_size=32, shuffle=True)
         test_loader_clf = DataLoader(test_dataset_clf, batch_size=32, shuffle=False)
 
-        # Train base models for Regression
+        # base models, regression
         models_reg, optimizers_reg, schedulers_reg, early_stoppings_reg, mse_loss = train_base_models_reg(
             X_train_reg_scaled, y_train_reg_scaled, device
         )
@@ -1400,13 +1303,10 @@ def main():
             device=device
         )
 
-        # Plot loss curves for Regression
         plot_loss_curve(loss_history1_reg, loss_history2_reg, fold, task='regression', eval=True)
 
-        # Get Regression Models
         fcnn1_reg, fcnn2_reg, lgbm_reg, xgb_reg, rf_reg = models_reg
 
-        # Train LightGBM Regressor
         try:
             lgbm_reg.fit(X_train_reg_scaled, y_train_reg_scaled)
         except Exception as e:
@@ -1414,7 +1314,6 @@ def main():
             logging.error(f"Error during LGBMRegressor training: {e}")
             continue
 
-        # Train XGBoost Regressor
         try:
             xgb_reg.fit(X_train_reg_scaled, y_train_reg_scaled)
         except Exception as e:
@@ -1422,7 +1321,6 @@ def main():
             logging.error(f"Error during XGBoost Regressor training: {e}")
             continue
 
-        # Train Random Forest Regressor
         try:
             rf_reg.fit(X_train_reg_scaled, y_train_reg_scaled)
         except Exception as e:
@@ -1430,7 +1328,7 @@ def main():
             logging.error(f"Error during RandomForestRegressor training: {e}")
             continue
 
-        # Generate meta-features for Regression
+        # meta-features, regression
         fold_meta_features_reg = generate_meta_features_reg(
             fcnn1=fcnn1_reg,
             fcnn2=fcnn2_reg,
@@ -1442,24 +1340,21 @@ def main():
             device=device
         )
 
-        # Predict with Meta-Model for Regression
         fold_meta_preds_reg_scaled = meta_model_reg.predict(fold_meta_features_reg)
-        # Restore this fold's standardized predictions to original prices.
+        # back to raw prices for this fold
         fold_meta_preds_reg, rmse, mape = regression_metrics_original_price(
             y_test_reg_fold,
             fold_meta_preds_reg_scaled,
             prediction_scaler=scaler_y_reg_eval,
         )
 
-        # Store Regression metrics
         rmses.append(rmse)
         mapes.append(mape)
 
-        # Print and log Regression metrics
         print(f"Fold {fold + 1} - Regression: RMSE (USD/oz)={rmse:.4f}, MAPE (%)={mape:.4f}")
         logging.info(f"Fold {fold + 1} - Regression: RMSE (USD/oz)={rmse:.4f}, MAPE (%)={mape:.4f}")
 
-        # Train base models for Classification
+        # base models, classification
         models_clf, optimizers_clf, schedulers_clf, early_stoppings_clf, focal_loss = train_base_models_clf(
             X_train_clf_scaled, y_train_clf_fold, device
         )
@@ -1473,13 +1368,10 @@ def main():
             device=device
         )
 
-        # Plot loss curves for Classification
         plot_loss_curve(loss_history1_clf, loss_history2_clf, fold, task='classification', eval=True)
 
-        # Get Classification Models
         fcnn1_clf, fcnn2_clf, lgbm_clf, xgb_clf, rf_clf = models_clf
 
-        # Train LightGBM Classifier
         try:
             lgbm_clf.fit(X_train_clf_scaled, y_train_clf_fold)
         except Exception as e:
@@ -1487,7 +1379,6 @@ def main():
             logging.error(f"Error during LGBMClassifier training: {e}")
             continue
 
-        # Train XGBoost Classifier
         try:
             xgb_clf.fit(X_train_clf_scaled, y_train_clf_fold)
         except Exception as e:
@@ -1495,7 +1386,6 @@ def main():
             logging.error(f"Error during XGBoost Classifier training: {e}")
             continue
 
-        # Train Random Forest Classifier
         try:
             rf_clf.fit(X_train_clf_scaled, y_train_clf_fold)
         except Exception as e:
@@ -1503,7 +1393,7 @@ def main():
             logging.error(f"Error during RandomForestClassifier training: {e}")
             continue
 
-        # Generate meta-features for Classification
+        # meta-features, classification
         fold_meta_features_clf = generate_meta_features_clf(
             fcnn1=fcnn1_clf,
             fcnn2=fcnn2_clf,
@@ -1515,19 +1405,18 @@ def main():
             device=device
         )
 
-        # Append to meta-feature lists for Classification
         meta_train_features_clf_cv2.append(fold_meta_features_clf)
         meta_train_labels_clf_cv2.extend(y_test_clf_fold.values)
 
-    # Combine all meta-features and labels for Regression (First Cross-Validation)
+    # combine regression meta-features (first CV)
     meta_train_features_reg_cv1 = np.vstack(meta_train_features_reg_cv1)
     meta_train_labels_reg_cv1 = np.array(meta_train_labels_reg_cv1)
 
-    # Combine all meta-features and labels for Classification (First Cross-Validation)
+    # combine classification meta-features (first CV)
     meta_train_features_clf_cv1 = np.vstack(meta_train_features_clf_cv1)
     meta_train_labels_clf_cv1 = np.array(meta_train_labels_clf_cv1)
 
-    # Train Meta-Model for Regression
+    # regression meta model
     print("\nTraining Meta-Model for Regression...")
     logging.info("Training Meta-Model for Regression started.")
     meta_model_reg = GradientBoostingRegressor(
@@ -1538,7 +1427,7 @@ def main():
     )
     meta_model_reg.fit(meta_train_features_reg_cv1, meta_train_labels_reg_cv1)
 
-    # Train Meta-Model for Classification
+    # classification meta model
     print("\nTraining Meta-Model for Classification...")
     logging.info("Training Meta-Model for Classification started.")
     meta_model_clf = GradientBoostingClassifier(
@@ -1549,7 +1438,7 @@ def main():
     )
     meta_model_clf.fit(meta_train_features_clf_cv1, meta_train_labels_clf_cv1)
 
-    # Second Cross-Validation: Evaluate Ensemble Models
+    # second CV: evaluate the ensemble
     print("\nEvaluating Ensemble Models for Regression and Classification...")
     logging.info("Evaluating Ensemble Models started.")
 
@@ -1557,15 +1446,12 @@ def main():
         print(f"\nFold {fold + 1} - Evaluating Ensemble Models")
         logging.info(f"Fold {fold + 1} - Evaluating Ensemble Models started")
 
-        # Split data for Regression
         X_train_reg, X_test_reg = X.iloc[train_index], X.iloc[test_index]
         y_train_reg_fold, y_test_reg_fold = y_reg.iloc[train_index], y_reg.iloc[test_index]
 
-        # Split data for Classification
         X_train_clf, X_test_clf = X.iloc[train_index], X.iloc[test_index]
         y_train_clf_fold, y_test_clf_fold = y_class.iloc[train_index], y_class.iloc[test_index]
 
-        # Scale features and targets
         X_train_reg_scaled, X_test_reg_scaled, scaler_X_reg_eval = preprocess_and_scale(
             X_train_reg, X_test_reg, scaler_type='StandardScaler'
         )
@@ -1576,19 +1462,17 @@ def main():
             X_train_clf, X_test_clf, scaler_type='StandardScaler'
         )
 
-        # Create Datasets and DataLoaders for Regression
         train_dataset_reg = FinancialRegressionDataset(X_train_reg_scaled, y_train_reg_scaled)
         test_dataset_reg = FinancialRegressionDataset(X_test_reg_scaled, y_test_reg_scaled)
         train_loader_reg = DataLoader(train_dataset_reg, batch_size=32, shuffle=True)
         test_loader_reg = DataLoader(test_dataset_reg, batch_size=32, shuffle=False)
 
-        # Create Datasets and DataLoaders for Classification
         train_dataset_clf = FinancialClassificationDataset(X_train_clf_scaled, y_train_clf_fold)
         test_dataset_clf = FinancialClassificationDataset(X_test_clf_scaled, y_test_clf_fold)
         train_loader_clf = DataLoader(train_dataset_clf, batch_size=32, shuffle=True)
         test_loader_clf = DataLoader(test_dataset_clf, batch_size=32, shuffle=False)
 
-        # Train base models for Regression
+        # base models, regression
         models_reg, optimizers_reg, schedulers_reg, early_stoppings_reg, mse_loss = train_base_models_reg(
             X_train_reg_scaled, y_train_reg_scaled, device
         )
@@ -1602,13 +1486,10 @@ def main():
             device=device
         )
 
-        # Plot loss curves for Regression
         plot_loss_curve(loss_history1_reg, loss_history2_reg, fold, task='regression', eval=True)
 
-        # Get Regression Models
         fcnn1_reg, fcnn2_reg, lgbm_reg, xgb_reg, rf_reg = models_reg
 
-        # Train LightGBM Regressor
         try:
             lgbm_reg.fit(X_train_reg_scaled, y_train_reg_scaled)
         except Exception as e:
@@ -1616,7 +1497,6 @@ def main():
             logging.error(f"Error during LGBMRegressor training: {e}")
             continue
 
-        # Train XGBoost Regressor
         try:
             xgb_reg.fit(X_train_reg_scaled, y_train_reg_scaled)
         except Exception as e:
@@ -1624,7 +1504,6 @@ def main():
             logging.error(f"Error during XGBoost Regressor training: {e}")
             continue
 
-        # Train Random Forest Regressor
         try:
             rf_reg.fit(X_train_reg_scaled, y_train_reg_scaled)
         except Exception as e:
@@ -1632,7 +1511,7 @@ def main():
             logging.error(f"Error during RandomForestRegressor training: {e}")
             continue
 
-        # Generate meta-features for Regression
+        # meta-features, regression
         fold_meta_features_reg = generate_meta_features_reg(
             fcnn1=fcnn1_reg,
             fcnn2=fcnn2_reg,
@@ -1644,24 +1523,21 @@ def main():
             device=device
         )
 
-        # Predict with Meta-Model for Regression
         fold_meta_preds_reg_scaled = meta_model_reg.predict(fold_meta_features_reg)
-        # Restore this fold's standardized predictions to original prices.
+        # back to raw prices for this fold
         fold_meta_preds_reg, rmse, mape = regression_metrics_original_price(
             y_test_reg_fold,
             fold_meta_preds_reg_scaled,
             prediction_scaler=scaler_y_reg_eval,
         )
 
-        # Store Regression metrics
         rmses.append(rmse)
         mapes.append(mape)
 
-        # Print and log Regression metrics
         print(f"Fold {fold + 1} - Regression: RMSE (USD/oz)={rmse:.4f}, MAPE (%)={mape:.4f}")
         logging.info(f"Fold {fold + 1} - Regression: RMSE (USD/oz)={rmse:.4f}, MAPE (%)={mape:.4f}")
 
-        # Train base models for Classification
+        # base models, classification
         models_clf, optimizers_clf, schedulers_clf, early_stoppings_clf, focal_loss = train_base_models_clf(
             X_train_clf_scaled, y_train_clf_fold, device
         )
@@ -1675,13 +1551,10 @@ def main():
             device=device
         )
 
-        # Plot loss curves for Classification
         plot_loss_curve(loss_history1_clf, loss_history2_clf, fold, task='classification', eval=True)
 
-        # Get Classification Models
         fcnn1_clf, fcnn2_clf, lgbm_clf, xgb_clf, rf_clf = models_clf
 
-        # Train LightGBM Classifier
         try:
             lgbm_clf.fit(X_train_clf_scaled, y_train_clf_fold)
         except Exception as e:
@@ -1689,7 +1562,6 @@ def main():
             logging.error(f"Error during LGBMClassifier training: {e}")
             continue
 
-        # Train XGBoost Classifier
         try:
             xgb_clf.fit(X_train_clf_scaled, y_train_clf_fold)
         except Exception as e:
@@ -1697,7 +1569,6 @@ def main():
             logging.error(f"Error during XGBoost Classifier training: {e}")
             continue
 
-        # Train Random Forest Classifier
         try:
             rf_clf.fit(X_train_clf_scaled, y_train_clf_fold)
         except Exception as e:
@@ -1705,7 +1576,7 @@ def main():
             logging.error(f"Error during RandomForestClassifier training: {e}")
             continue
 
-        # Generate meta-features for Classification
+        # meta-features, classification
         fold_meta_features_clf = generate_meta_features_clf(
             fcnn1=fcnn1_clf,
             fcnn2=fcnn2_clf,
@@ -1717,19 +1588,18 @@ def main():
             device=device
         )
 
-        # Append to meta-feature lists for Classification
         meta_train_features_clf_cv2.append(fold_meta_features_clf)
         meta_train_labels_clf_cv2.extend(y_test_clf_fold.values)
 
-    # Combine all meta-features and labels for Regression (First Cross-Validation)
+    # combine regression meta-features (first CV)
     meta_train_features_reg_cv1 = np.vstack(meta_train_features_reg_cv1)
     meta_train_labels_reg_cv1 = np.array(meta_train_labels_reg_cv1)
 
-    # Combine all meta-features and labels for Classification (First Cross-Validation)
+    # combine classification meta-features (first CV)
     meta_train_features_clf_cv1 = np.vstack(meta_train_features_clf_cv1)
     meta_train_labels_clf_cv1 = np.array(meta_train_labels_clf_cv1)
 
-    # Train Meta-Model for Regression
+    # regression meta model
     print("\nTraining Meta-Model for Regression...")
     logging.info("Training Meta-Model for Regression started.")
     meta_model_reg = GradientBoostingRegressor(
@@ -1740,7 +1610,7 @@ def main():
     )
     meta_model_reg.fit(meta_train_features_reg_cv1, meta_train_labels_reg_cv1)
 
-    # Train Meta-Model for Classification
+    # classification meta model
     print("\nTraining Meta-Model for Classification...")
     logging.info("Training Meta-Model for Classification started.")
     meta_model_clf = GradientBoostingClassifier(
@@ -1751,7 +1621,7 @@ def main():
     )
     meta_model_clf.fit(meta_train_features_clf_cv1, meta_train_labels_clf_cv1)
 
-    # Second Cross-Validation: Evaluate Ensemble Models
+    # second CV: evaluate the ensemble
     print("\nEvaluating Ensemble Models for Regression and Classification...")
     logging.info("Evaluating Ensemble Models started.")
 
@@ -1759,15 +1629,12 @@ def main():
         print(f"\nFold {fold + 1} - Evaluating Ensemble Models")
         logging.info(f"Fold {fold + 1} - Evaluating Ensemble Models started")
 
-        # Split data for Regression
         X_train_reg, X_test_reg = X.iloc[train_index], X.iloc[test_index]
         y_train_reg_fold, y_test_reg_fold = y_reg.iloc[train_index], y_reg.iloc[test_index]
 
-        # Split data for Classification
         X_train_clf, X_test_clf = X.iloc[train_index], X.iloc[test_index]
         y_train_clf_fold, y_test_clf_fold = y_class.iloc[train_index], y_class.iloc[test_index]
 
-        # Scale features and targets
         X_train_reg_scaled, X_test_reg_scaled, scaler_X_reg_eval = preprocess_and_scale(
             X_train_reg, X_test_reg, scaler_type='StandardScaler'
         )
@@ -1778,19 +1645,17 @@ def main():
             X_train_clf, X_test_clf, scaler_type='StandardScaler'
         )
 
-        # Create Datasets and DataLoaders for Regression
         train_dataset_reg = FinancialRegressionDataset(X_train_reg_scaled, y_train_reg_scaled)
         test_dataset_reg = FinancialRegressionDataset(X_test_reg_scaled, y_test_reg_scaled)
         train_loader_reg = DataLoader(train_dataset_reg, batch_size=32, shuffle=True)
         test_loader_reg = DataLoader(test_dataset_reg, batch_size=32, shuffle=False)
 
-        # Create Datasets and DataLoaders for Classification
         train_dataset_clf = FinancialClassificationDataset(X_train_clf_scaled, y_train_clf_fold)
         test_dataset_clf = FinancialClassificationDataset(X_test_clf_scaled, y_test_clf_fold)
         train_loader_clf = DataLoader(train_dataset_clf, batch_size=32, shuffle=True)
         test_loader_clf = DataLoader(test_dataset_clf, batch_size=32, shuffle=False)
 
-        # Train base models for Regression
+        # base models, regression
         models_reg, optimizers_reg, schedulers_reg, early_stoppings_reg, mse_loss = train_base_models_reg(
             X_train_reg_scaled, y_train_reg_scaled, device
         )
@@ -1804,13 +1669,10 @@ def main():
             device=device
         )
 
-        # Plot loss curves for Regression
         plot_loss_curve(loss_history1_reg, loss_history2_reg, fold, task='regression', eval=True)
 
-        # Get Regression Models
         fcnn1_reg, fcnn2_reg, lgbm_reg, xgb_reg, rf_reg = models_reg
 
-        # Train LightGBM Regressor
         try:
             lgbm_reg.fit(X_train_reg_scaled, y_train_reg_scaled)
         except Exception as e:
@@ -1818,7 +1680,6 @@ def main():
             logging.error(f"Error during LGBMRegressor training: {e}")
             continue
 
-        # Train XGBoost Regressor
         try:
             xgb_reg.fit(X_train_reg_scaled, y_train_reg_scaled)
         except Exception as e:
@@ -1826,7 +1687,6 @@ def main():
             logging.error(f"Error during XGBoost Regressor training: {e}")
             continue
 
-        # Train Random Forest Regressor
         try:
             rf_reg.fit(X_train_reg_scaled, y_train_reg_scaled)
         except Exception as e:
@@ -1834,7 +1694,7 @@ def main():
             logging.error(f"Error during RandomForestRegressor training: {e}")
             continue
 
-        # Generate meta-features for Regression
+        # meta-features, regression
         fold_meta_features_reg = generate_meta_features_reg(
             fcnn1=fcnn1_reg,
             fcnn2=fcnn2_reg,
@@ -1846,24 +1706,21 @@ def main():
             device=device
         )
 
-        # Predict with Meta-Model for Regression
         fold_meta_preds_reg_scaled = meta_model_reg.predict(fold_meta_features_reg)
-        # Restore this fold's standardized predictions to original prices.
+        # back to raw prices for this fold
         fold_meta_preds_reg, rmse, mape = regression_metrics_original_price(
             y_test_reg_fold,
             fold_meta_preds_reg_scaled,
             prediction_scaler=scaler_y_reg_eval,
         )
 
-        # Store Regression metrics
         rmses.append(rmse)
         mapes.append(mape)
 
-        # Print and log Regression metrics
         print(f"Fold {fold + 1} - Regression: RMSE (USD/oz)={rmse:.4f}, MAPE (%)={mape:.4f}")
         logging.info(f"Fold {fold + 1} - Regression: RMSE (USD/oz)={rmse:.4f}, MAPE (%)={mape:.4f}")
 
-        # Train base models for Classification
+        # base models, classification
         models_clf, optimizers_clf, schedulers_clf, early_stoppings_clf, focal_loss = train_base_models_clf(
             X_train_clf_scaled, y_train_clf_fold, device
         )
@@ -1877,13 +1734,10 @@ def main():
             device=device
         )
 
-        # Plot loss curves for Classification
         plot_loss_curve(loss_history1_clf, loss_history2_clf, fold, task='classification', eval=True)
 
-        # Get Classification Models
         fcnn1_clf, fcnn2_clf, lgbm_clf, xgb_clf, rf_clf = models_clf
 
-        # Train LightGBM Classifier
         try:
             lgbm_clf.fit(X_train_clf_scaled, y_train_clf_fold)
         except Exception as e:
@@ -1891,7 +1745,6 @@ def main():
             logging.error(f"Error during LGBMClassifier training: {e}")
             continue
 
-        # Train XGBoost Classifier
         try:
             xgb_clf.fit(X_train_clf_scaled, y_train_clf_fold)
         except Exception as e:
@@ -1899,7 +1752,6 @@ def main():
             logging.error(f"Error during XGBoost Classifier training: {e}")
             continue
 
-        # Train Random Forest Classifier
         try:
             rf_clf.fit(X_train_clf_scaled, y_train_clf_fold)
         except Exception as e:
@@ -1907,7 +1759,7 @@ def main():
             logging.error(f"Error during RandomForestClassifier training: {e}")
             continue
 
-        # Generate meta-features for Classification
+        # meta-features, classification
         fold_meta_features_clf = generate_meta_features_clf(
             fcnn1=fcnn1_clf,
             fcnn2=fcnn2_clf,
@@ -1919,19 +1771,18 @@ def main():
             device=device
         )
 
-        # Append to meta-feature lists for Classification
         meta_train_features_clf_cv2.append(fold_meta_features_clf)
         meta_train_labels_clf_cv2.extend(y_test_clf_fold.values)
 
-    # Combine all meta-features and labels for Regression (First Cross-Validation)
+    # combine regression meta-features (first CV)
     meta_train_features_reg_cv1 = np.vstack(meta_train_features_reg_cv1)
     meta_train_labels_reg_cv1 = np.array(meta_train_labels_reg_cv1)
 
-    # Combine all meta-features and labels for Classification (First Cross-Validation)
+    # combine classification meta-features (first CV)
     meta_train_features_clf_cv1 = np.vstack(meta_train_features_clf_cv1)
     meta_train_labels_clf_cv1 = np.array(meta_train_labels_clf_cv1)
 
-    # Train Meta-Model for Regression
+    # regression meta model
     print("\nTraining Meta-Model for Regression...")
     logging.info("Training Meta-Model for Regression started.")
     meta_model_reg = GradientBoostingRegressor(
@@ -1942,7 +1793,7 @@ def main():
     )
     meta_model_reg.fit(meta_train_features_reg_cv1, meta_train_labels_reg_cv1)
 
-    # Train Meta-Model for Classification
+    # classification meta model
     print("\nTraining Meta-Model for Classification...")
     logging.info("Training Meta-Model for Classification started.")
     meta_model_clf = GradientBoostingClassifier(
@@ -1953,7 +1804,7 @@ def main():
     )
     meta_model_clf.fit(meta_train_features_clf_cv1, meta_train_labels_clf_cv1)
 
-    # Evaluate Metrics
+    # evaluate
     print("\nOverall Regression Results:")
     print(f"Average RMSE (USD/oz): {np.mean(rmses):.4f} ± {np.std(rmses):.4f}")
     print(f"Average MAPE (%): {np.mean(mapes):.4f} ± {np.std(mapes):.4f}")
@@ -1978,7 +1829,7 @@ def main():
         f"Average AUC={np.mean(aucs):.4f} ± {np.std(aucs):.4f}"
     )
 
-    # Save Overall Results
+    # overall results
     with open('evaluation_results.txt', 'w') as f:
         f.write("Overall Regression Results:\n")
         f.write(f"Average RMSE (USD/oz): {np.mean(rmses):.4f} ± {np.std(rmses):.4f}\n")

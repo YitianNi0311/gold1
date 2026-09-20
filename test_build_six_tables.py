@@ -1,4 +1,4 @@
-"""The six-table gate must reject equal-length but misaligned forecasts."""
+"""The six-table gate must reject forecasts that have the right length but the wrong dates or prices."""
 
 import unittest
 

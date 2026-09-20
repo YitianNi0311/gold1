@@ -1,10 +1,9 @@
-"""Aligned CNN-LSTM classifiers and a NEW price-regression reconstruction.
+"""CNN-LSTM.
 
-Classification reuses lstm/CNN-LSTM_tuned.py with its original 48-feature
-body, inner chronological learning-rate tuning, and five outer folds, but
-selects the 4,419-row BFNE population. Regression adds a one-output head;
-that head was not found in the author's project. No historical table is edited.
-"""
+Classification reuses lstm/CNN_LSTM_tuned.py (48 features, inner learning-rate pick
+in time order, five outer folds) on the same 4,419 rows BFNE uses. The regression
+head is new: a single output added on top. The authors' regression version wasn't
+in their project."""
 
 import argparse
 import importlib.util
@@ -23,7 +22,7 @@ from historical_alignment import ROOT, aligned_data
 from regression_scale_utils import regression_metrics_original_price
 
 
-TUNED_SOURCE = ROOT / "lstm" / "CNN-LSTM_tuned.py"
+TUNED_SOURCE = ROOT / "lstm" / "CNN_LSTM_tuned.py"
 
 
 def load_tuned_module(output_dir):
@@ -36,7 +35,7 @@ def load_tuned_module(output_dir):
 
 
 def run_regression(module, x, y_price, expected, splits, device, output_dir, seed=42):
-    """Fit the reconstructed one-output head on each original training fold."""
+    """Train the new single-output head separately on each training fold."""
     rows, metrics = [], []
     for fold, (train, test) in enumerate(splits, 1):
         module.set_seed(seed)

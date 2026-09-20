@@ -1,11 +1,9 @@
-"""Paper-defined without-FE reconstruction, not a recovered author script.
+"""BFNE-Net without feature engineering, rebuilt from the paper (not the authors' script).
 
-Uses exactly the 11 original inputs in paper Table 1 and deletes all 37
-engineered inputs in Table 2. Retains the two-FCNN plus three-tree -> GBM
-architecture, historical labels and five chronological outer folds. A full
-run is expensive: each of ten fold passes performs the original Optuna search.
-No historical Table 8/9 files are edited.
-"""
+Uses only the 11 raw variables in Table 1 and drops all 37 engineered features from
+Table 2. Everything else is unchanged: two FCNNs + three trees -> GBM, same labels,
+same five folds. One run takes a long time because each of the 10 training folds
+redoes the Optuna search."""
 
 import argparse
 import importlib.util
@@ -22,7 +20,7 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 from torch.utils.data import DataLoader
 
 from historical_alignment import ROOT, aligned_data
-from no_fcnn_model import prepare_fold, fit_meta_models
+from BFNE_Net_without_FCNNs import prepare_fold, fit_meta_models
 from regression_scale_utils import regression_metrics_original_price
 
 
@@ -50,7 +48,7 @@ def audit_features(x):
 
 
 def load_full_model_source():
-    path = ROOT / "归一.py"
+    path = ROOT / "BFNE_Net.py"
     spec = importlib.util.spec_from_file_location("full_bfne_source", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -97,7 +95,7 @@ def run(output_dir):
     manifest = {
         "status": "running", "source": "new paper-defined without-FE reconstruction",
         "author_implementation_recovered": False,
-        "full_model_source": str(ROOT / "归一.py"), "seed": 42,
+        "full_model_source": str(ROOT / "BFNE_Net.py"), "seed": 42,
         "n_cleaned_rows": len(x), "n_features": x.shape[1],
         "selected_raw_features_table1": list(RAW_FEATURES),
         "deleted_engineered_features_table2": deleted,
@@ -110,7 +108,7 @@ def run(output_dir):
     manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
     prior_directory = Path.cwd()
     try:
-        os.chdir(output_dir)  # Source logging writes into this new run directory.
+        os.chdir(output_dir)  # logging goes into the new run dir
         base = load_full_model_source()
         random.seed(42)
         np.random.seed(42)

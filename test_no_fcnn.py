@@ -1,4 +1,4 @@
-"""Local implementation checks; uses small fixtures without running the search."""
+"""Checks on the local implementation with tiny fixtures; no search is run."""
 
 import ast
 import contextlib
@@ -12,7 +12,7 @@ from unittest.mock import Mock, patch
 import numpy as np
 import pandas as pd
 
-import no_fcnn_model as model
+import BFNE_Net_without_FCNNs as model
 import run_no_fcnn as runner
 from regression_scale_utils import regression_metrics_original_price
 
@@ -22,8 +22,8 @@ ROOT = Path(__file__).resolve().parent
 
 class NoFCNNTests(unittest.TestCase):
     def test_original_preprocessing_scaling_and_search_unchanged(self):
-        original = ast.parse((ROOT / "归一.py").read_text(encoding="utf-8"))
-        local = ast.parse((ROOT / "no_fcnn_model.py").read_text(encoding="utf-8"))
+        original = ast.parse((ROOT / "BFNE_Net.py").read_text(encoding="utf-8"))
+        local = ast.parse((ROOT / "BFNE_Net_without_FCNNs.py").read_text(encoding="utf-8"))
         original_functions = {node.name: node for node in original.body if isinstance(node, ast.FunctionDef)}
         local_functions = {node.name: node for node in local.body if isinstance(node, ast.FunctionDef)}
         for name in ("preprocess_data", "preprocess_and_scale", "preprocess_and_scale_reg_target",
@@ -33,7 +33,7 @@ class NoFCNNTests(unittest.TestCase):
         imports = [node.module for node in ast.walk(local) if isinstance(node, ast.ImportFrom)]
         imports.extend(alias.name for node in ast.walk(local) if isinstance(node, ast.Import) for alias in node.names)
         self.assertNotIn("torch", imports)
-        self.assertNotIn("归一", imports)
+        self.assertNotIn("BFNE_Net", imports)
 
     def test_three_trees_and_original_parameters(self):
         best = dict(n_estimators=100, learning_rate=.05, num_leaves=20, max_depth=3,

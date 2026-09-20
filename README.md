@@ -1,32 +1,59 @@
-# Gold prediction experiments
+# BFNE-Net experiment settings
 
-黄金价格回归、历史方向分类和 stacking 模型的代码与数据存档。
+## Random seeds
 
-## 当前版本
+Three seeds: **42, 43, 44**.
 
-- `归一.py`：FCNN1 + FCNN2 + LightGBM + XGBoost + Random Forest → GBM，保留原有重复评估流程。
-- `no_fcnn_model.py`、`run_no_fcnn.py`：独立零 FCNN 模型，LightGBM + XGBoost + Random Forest → GBM。一次五折 OOF、五轮五折回归评估；分类只在第一轮五折计分。
-- `reconstructed_random_walk.py`、`reconstructed_cnn_lstm.py`、`reconstructed_without_fe.py`：历史空白项的独立重建代码。它们不是已找到的作者原实现；当前未写入 Table 8/9 成绩。
-- `RF.py`、`XGBoost.py`、`gold lightgbm.py`：独立树模型。
-- `GOLD_cleaned.xlsx`：当前实验工作簿。
-- `regression_scale_utils.py`：统一原始价格 RMSE（USD/oz）和百分数 MAPE。
-- `历史状态复核_20260917/`：先前保存预测的复核指标和证据。
+- Neural nets and numpy/random: `seed + 100 * evaluation_round + fold`
+- Optuna (TPE sampler): `seed * 10000 + fold_slot`
+- `random_state` of the final tree models: the seed itself
+- The LightGBM inside the Optuna objective always uses `random_state=42`
+- Only the first evaluation round is used, five folds
 
-## 运行
+## Data and splits
 
-使用已安装 numpy、pandas、scikit-learn、lightgbm、xgboost、optuna、ta 和 openpyxl 的 Python 环境：
+- `GOLD_cleaned.xlsx`, 4,419 rows after cleaning, 48 features
+- `TimeSeriesSplit(n_splits=5)`, 736 test rows per fold, 3,680 test predictions in total
+- Classification label: `GOLD.diff() > 0`; regression label: `GOLD.shift(-1)`
+- Features are standardized; the regression target is standardized with a scaler fit on each training fold and inverted back to raw prices for evaluation
 
-```shell
-python run_no_fcnn.py
-python -m unittest -v test_regression_scale test_no_fcnn
-```
+## Neural networks (FCNN1 / FCNN2)
 
-完整 FCNN 模型及其他脚本还需要其各自导入的 PyTorch、matplotlib 等依赖。部分历史脚本保留原机器的数据路径，运行前需检查。
+| Parameter | FCNN1 | FCNN2 |
+|---|---|---|
+| Hidden layers | 256-128-64 | 512-256-128-64 |
+| Activation / norm / dropout | LeakyReLU / BatchNorm / 0.5 | same |
+| Optimizer | AdamW, weight decay 1e-5 | same |
+| Learning rate | regression 5e-3, classification 5e-4 | same |
+| LR schedule | CosineAnnealing, T_max=50 | same |
+| Batch size | 32 | 32 |
+| Max epochs | 300 | 300 |
+| Early-stopping patience | regression 12, classification 15 (both nets stop when either triggers) | same |
+| Loss | regression MSE; classification focal loss (gamma=2, balanced class weights) | same |
 
-## 历史协议说明
+## Tree models
 
-分类标签为 `(GOLD.diff() > 0)`，回归标签为 `GOLD.shift(-1)`。旧分类标签和元模型评估流程存在泄漏，保存的历史结果不能解释为无泄漏的下一日预测成绩。
+| Model | Parameters |
+|---|---|
+| Random Forest | n_estimators=200, max_depth=10 |
+| XGBoost | n_estimators=300, learning_rate=0.03, max_depth=7, subsample=0.9, colsample_bytree=0.9; regression reg:squarederror, classification binary:logistic (logloss) |
+| LightGBM (inside BFNE-Net) | Optuna, 50 trials, 3-fold CV; n_estimators 100-500, learning_rate 0.01-0.1 (log), num_leaves 20-100, subsample 0.5-1.0, colsample_bytree 0.5-1.0, max_depth 3-15; regression minimizes MSE, classification maximizes AUC |
+| LightGBM (standalone baseline) | n_estimators=500, learning_rate=0.01, max_depth=15, num_leaves=100, subsample=0.5, colsample_bytree=0.5 |
 
-本工作区不包含统计检验实现。自动化代码测试用于验证程序和评估尺度。
+## Meta learner (GBM)
 
-详见 [代码修复与重建说明](代码修复与重建说明_20260918.md)、[零 FCNN 运行说明](零FCNN运行说明.md)和[回归尺度修改说明](回归尺度修改说明.md)。旧的[运行逻辑核对](零FCNN运行逻辑核对.md)记录五轮评估改动前的实现。历史复核文档中引用的外部目录不随本仓库上传；对齐所需的真实目标已单独保存在 `seed42_reference_targets.csv`。
+GradientBoosting, n_estimators=300, learning_rate=0.15, max_depth=5.
+Inputs: full BFNE-Net uses 5 features for regression and 10 for classification; the version without FCNNs uses 3 and 6.
+The meta learner is fit on the five-fold OOF predictions first, then evaluated on the same five folds.
+
+## CNN-LSTM
+
+Conv1d 128-256-512 (kernel 3) -> 3-layer LSTM (hidden 128, dropout 0.3) -> Linear. Batch size 32, up to 100 epochs, 30-epoch inner tuning (patience 8) over learning rates 5e-4 / 1e-3 / 2e-4 (AdamW, weight decay 1e-5) plus Adam 5e-4, CosineAnnealing (T_max=100).
+
+## Random walk
+
+Predicts the next trading day's GOLD with today's GOLD. No parameters.
+
+## Statistical test
+
+Diebold-Mariano, full BFNE-Net vs the version without FCNNs: two-sided, horizon 1, Bartlett-weighted HAC variance with lag 10, Harvey-Leybourne-Newbold small-sample correction.

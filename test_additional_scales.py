@@ -1,4 +1,4 @@
-"""Synthetic checks for the additional legacy regression evaluation paths."""
+"""Synthetic checks of the evaluation scale in a few legacy regression scripts."""
 
 import ast
 import unittest
@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parent
 class AdditionalScaleTests(unittest.TestCase):
     def test_scaled_one_fcnn_variants_restore_each_fold_once(self):
         for name in ("去2FCNN.py", "去掉2个.py"):
-            tree = ast.parse((ROOT / name).read_text(encoding="utf-8"))
+            tree = ast.parse((ROOT / "archive" / name).read_text(encoding="utf-8"))
             matches = [node for node in ast.walk(tree) if isinstance(node, ast.Assign)
                        and isinstance(node.value, ast.Call)
                        and isinstance(node.value.func, ast.Name)
@@ -41,7 +41,7 @@ class AdditionalScaleTests(unittest.TestCase):
     def test_native_price_variants_return_percent(self):
         for name in ("去no1fcnn.py", "加上软投票.py", "最后的尝试.py",
                      "feature_analysis.py", "不拆分.py"):
-            tree = ast.parse((ROOT / name).read_text(encoding="utf-8"))
+            tree = ast.parse((ROOT / "archive" / name).read_text(encoding="utf-8"))
             function = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
                             and node.name == "mean_absolute_percentage_error_custom")
             namespace = {"mean_absolute_percentage_error": mean_absolute_percentage_error}

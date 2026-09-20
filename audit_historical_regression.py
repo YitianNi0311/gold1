@@ -1,4 +1,4 @@
-"""Read-only audit of retained predictions; writes new audit artifacts, never trains."""
+"""Read-only audit of the saved predictions. Writes new audit files, never trains."""
 
 import argparse
 import ast
@@ -54,12 +54,12 @@ def main():
         evidence[str(path)] = sha(path)
         return pd.read_csv(path, float_precision="round_trip")
 
-    for name in ("归一.py", "RF.py", "XGBoost.py", "gold lightgbm.py", "GOLD_cleaned.xlsx"):
+    for name in ("BFNE_Net.py", "Random_Forest.py", "XGBoost.py", "LightGBM.py", "GOLD_cleaned.xlsx"):
         assert sha(ROOT / name) == sha(reference / name), f"Reference mismatch: {name}"
         evidence[str(reference / name)] = sha(reference / name)
 
-    # Execute only the unchanged feature/label function, never the training module.
-    X, yc, yr = load_preprocessing(ROOT / "归一.py")(ROOT / "GOLD_cleaned.xlsx")
+    # run only the untouched feature/label function, never the training module
+    X, yc, yr = load_preprocessing(ROOT / "BFNE_Net.py")(ROOT / "GOLD_cleaned.xlsx")
     raw = pd.read_excel(ROOT / "GOLD_cleaned.xlsx")
     np.testing.assert_array_equal(yc, (raw.GOLD.diff() > 0).astype(int).loc[X.index])
     np.testing.assert_array_equal(yr, raw.GOLD.shift(-1).loc[X.index])
@@ -110,9 +110,9 @@ def main():
                                   "max_price_reconstruction_error": float(np.max(np.abs(predicted - group.y_pred_price_original)))})
         score(model, frame)
 
-    for prefix, model, filename in (("RF", "Random Forest", "RF.py"),
+    for prefix, model, filename in (("RF", "Random Forest", "Random_Forest.py"),
                                     ("XGBoost", "XGBoost", "XGBoost.py"),
-                                    ("LightGBM", "LightGBM", "gold lightgbm.py")):
+                                    ("LightGBM", "LightGBM", "LightGBM.py")):
         frame = read_csv(table / f"{prefix}_regression_predictions_original_price.csv")
         frame = frame.rename(columns={"y_true_price_original": "y_true_price"})
         np.testing.assert_array_equal(frame.row_index, X.index[test_indices])
@@ -126,9 +126,9 @@ def main():
         calculated = pd.DataFrame([row for row in rows if row["model"] == model])
         logged_calculated = calculated.copy()
         if prefix == "XGBoost":
-            # pandas wrote the native float32 predictions as short decimal strings.
-            # Recover that dtype only to validate the metrics computed before CSV
-            # serialization; the audit output itself scores the saved CSV values.
+            # pandas wrote the float32 predictions as short decimal strings;
+            # casting back to float32 is only to check the metrics computed before the CSV write,
+            # the audit itself scores whatever is saved in the CSV.
             native_rows = []
             for fold, group in frame.groupby("fold", sort=True):
                 native_predictions = group.y_pred_price_original.to_numpy(dtype=np.float32).astype(float)
@@ -146,7 +146,7 @@ def main():
         log_path = table / f"{prefix}.log"
         evidence[str(log_path)] = sha(log_path)
         log_bytes = log_path.read_bytes()
-        # Windows PowerShell redirected historical stdout as UTF-16 with a BOM.
+        # old stdout came from a PowerShell redirect: UTF-16 with a BOM
         log_encoding = "utf-16" if log_bytes.startswith((b"\xff\xfe", b"\xfe\xff")) else "utf-8-sig"
         log = log_bytes.decode(log_encoding)
         for row in logged_calculated.itertuples():
@@ -168,13 +168,13 @@ def main():
         assert retained_table.loc[row.model, "MAPE five-fold mean ± std (%)"] == (
             f"{row.mape_percent_mean:.4f} ± {row.mape_percent_std:.4f}")
 
-    # Explicitly preserve the distinction between five-fold means and pooled RMSE.
+    # fold-mean RMSE and pooled RMSE are different things, keep both
     fold_results.to_csv(output / "fold_metrics.csv", index=False, encoding="utf-8-sig")
     summary.to_csv(output / "five_fold_summary.csv", index=False, encoding="utf-8-sig")
     pd.DataFrame(pooled).to_csv(output / "pooled_metrics.csv", index=False, encoding="utf-8-sig")
     pd.DataFrame(scaler_checks).to_csv(output / "fold_scaler_verification.csv", index=False, encoding="utf-8-sig")
     pd.DataFrame(serialization_checks).to_csv(output / "csv_precision_verification.csv", index=False, encoding="utf-8-sig")
-    # Hash the read-only evidence again to detect accidental modifications.
+    # hash the evidence files again to make sure nothing changed
     assert all(sha(Path(path)) == value for path, value in evidence.items())
     report = {"passed": True, "mode": "recompute retained historical predictions; no training",
               "reference_root": str(reference), "n_samples": len(X), "n_features": X.shape[1],
