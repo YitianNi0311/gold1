@@ -1,0 +1,5 @@
+# New aligned rerun tables
+
+These six tables are new results, not replacements for historical Table 8/9. Random Walk, CNN-LSTM regression, and without-FE are explicitly reconstructed baselines. Table 8/9 use the first unique 3,680 test predictions per seed and mean of five fold metrics. Seed-42 Table 8 standard deviations describe five folds; the three-seed Table 8 standard deviations describe the three five-fold seed means. Table 9 reports the mean of three five-fold seed means. DM compares paired first-round full versus zero-FCNN daily losses, with Bartlett HAC lag 10 and a two-sided modified DM test. Three-seed DM averages each date's paired losses before testing; p-values are never averaged. Historical classification labels and meta-evaluation leakage remain, so these are not leakage-free next-day scores.
+
+Run notes (2026-09-20): full BFNE-Net and zero-FCNN used `--rounds 1` (first evaluation round only, 5 folds x 736 dates), not the historical five-round loop; Table 8/9 and DM use the first round only. Thread counts were capped with OMP_NUM_THREADS=6 (see `run_seed.sh`); this does not change predictions.

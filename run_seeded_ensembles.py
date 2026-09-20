@@ -112,7 +112,7 @@ def record(path, frame):
     frame.to_csv(path, index=False, encoding="utf-8-sig", float_format="%.17g")
 
 
-def run(model, seed, output_dir):
+def run(model, seed, output_dir, evaluation_rounds=5):
     if model not in ("full", "no_fcnn", "without_fe") or seed not in (42, 43, 44):
         raise ValueError("Unsupported model or seed")
     output_dir = Path(output_dir).resolve()
@@ -121,7 +121,7 @@ def run(model, seed, output_dir):
     source = zero if model == "no_fcnn" else load_full_model_source()
     configure_module(source, model, seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    rounds = 1 if model == "without_fe" else 5
+    rounds = 1 if model == "without_fe" else evaluation_rounds
     output_dir.mkdir(parents=True, exist_ok=True)
     manifest_file = output_dir / "run_manifest.json"
     manifest = {
@@ -242,5 +242,7 @@ if __name__ == "__main__":
     parser.add_argument("--model", choices=("full", "no_fcnn", "without_fe"), required=True)
     parser.add_argument("--seed", type=int, choices=(42, 43, 44), required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--rounds", type=int, default=5, choices=(1, 2, 3, 4, 5),
+                        help="Evaluation rounds; tables use round 1 only")
     args = parser.parse_args()
-    run(args.model, args.seed, args.output)
+    run(args.model, args.seed, args.output, args.rounds)
