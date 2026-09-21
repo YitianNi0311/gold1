@@ -1,9 +1,0 @@
-﻿Model,Directional AUC mean,RMSE mean ± std (USD/oz),MAPE mean ± std (%),N predictions per seed,N seeds,Result source,Status
-Random Forest,0.65580856902861784,214.7165 ± 188.2713,13.6055 ± 13.5259,3680,1,original project tree script,new aligned rerun; historical leakage retained
-XGBoost,0.70190851528207021,221.6212 ± 190.4685,14.0033 ± 13.7963,3680,1,original project tree script,new aligned rerun; historical leakage retained
-LightGBM,0.70249321391543595,219.5004 ± 187.9380,14.0338 ± 13.8823,3680,1,original project tree script,new aligned rerun; historical leakage retained
-Random Walk,,16.2246 ± 2.8563,0.8505 ± 0.1846,3680,1,new persistence reconstruction,new aligned rerun; historical leakage retained
-CNN-LSTM,0.56447535780034142,273.6631 ± 174.8881,17.4565 ± 11.9257,3680,1,aligned classifier and new regression head,new aligned rerun; historical leakage retained
-BFNE-Net without FE,0.62331574379783261,170.9744 ± 106.2866,9.2662 ± 6.0716,3680,1,new paper-defined reconstruction,new aligned rerun; historical leakage retained
-BFNE-Net without FCNNs,0.90794304524885694,117.4421 ± 76.7851,4.8122 ± 2.5919,3680,1,three-tree implementation,new aligned rerun; historical leakage retained
-BFNE-Net,0.78942988668409309,43.7402 ± 26.1325,2.6736 ± 1.8846,3680,1,full implementation,new aligned rerun; historical leakage retained

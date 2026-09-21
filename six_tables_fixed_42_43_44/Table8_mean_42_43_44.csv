@@ -1,9 +1,0 @@
-﻿Model,Directional AUC mean,RMSE mean ± std (USD/oz),MAPE mean ± std (%),N predictions per seed,N seeds,Result source,Status
-Random Forest,0.5169821225174841,202.3532 ± 0.1266,10.1433 ± 0.0146,2944,3,original project tree script,next-day label; meta model trained on earlier folds only
-XGBoost,0.5135103491195937,211.7498 ± 0.9619,10.5268 ± 0.0528,2944,3,original project tree script,next-day label; meta model trained on earlier folds only
-LightGBM,0.51112923598493298,205.4701 ± 0.4896,10.2526 ± 0.0215,2944,3,original project tree script,next-day label; meta model trained on earlier folds only
-Random Walk,,17.0730 ± 0.0000,0.7723 ± 0.0000,2944,3,new persistence reconstruction,next-day label; meta model trained on earlier folds only
-CNN-LSTM,0.49736501849768228,266.1838 ± 18.0757,14.8228 ± 1.0536,2944,3,aligned classifier and new regression head,next-day label; meta model trained on earlier folds only
-BFNE-Net without FE,0.50032494279947148,483.4269 ± 39.0109,27.9831 ± 2.9714,2944,3,new paper-defined reconstruction,next-day label; meta model trained on earlier folds only
-BFNE-Net without FCNNs,0.49364081746015837,353.6186 ± 2.5495,19.7906 ± 0.0918,2944,3,three-tree implementation,next-day label; meta model trained on earlier folds only
-BFNE-Net,0.49684862017809311,355.5680 ± 14.6859,21.4541 ± 1.4838,2944,3,full implementation,next-day label; meta model trained on earlier folds only

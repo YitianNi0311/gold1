@@ -1,8 +1,0 @@
-﻿Model,Accuracy,Precision,Recall,F1,Seed(s),Status
-Random Forest,0.58206521739130435,0.71159606986095136,0.43698910857714079,0.481007831801125,42,original project tree script; historical leakage retained
-XGBoost,0.6285326086956522,0.71901038034139675,0.51904604154316458,0.57278118116313614,42,original project tree script; historical leakage retained
-LightGBM,0.62391304347826082,0.70773651060521758,0.52153177343050761,0.57870290965776083,42,original project tree script; historical leakage retained
-CNN-LSTM,0.54266304347826089,0.57086283980620012,0.49911717869140187,0.5116791719779521,42,aligned classifier and new regression head; historical leakage retained
-BFNE-Net without FE,0.58967391304347827,0.59192463813605856,0.73907544954725612,0.65512515074102995,42,new paper-defined reconstruction; historical leakage retained
-BFNE-Net without FCNNs,0.82798913043478239,0.83246950323107272,0.84626890306982361,0.83889573025212805,42,three-tree implementation; historical leakage retained
-BFNE-Net,0.69972826086956519,0.71752674347633838,0.76348211691134593,0.72218736339097078,42,full implementation; historical leakage retained
